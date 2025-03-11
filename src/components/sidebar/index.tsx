@@ -1,7 +1,8 @@
 /* eslint-disable */
 
+import React from 'react';
 import { HiX } from 'react-icons/hi';
-import Links from './components/Links';
+import SidebarLinks from './components/Links';
 
 import {
   renderThumb,
@@ -10,18 +11,26 @@ import {
   renderViewMini,
 } from '@/components/scrollbar/Scrollbar';
 import { Scrollbars } from 'react-custom-scrollbars-2';
-import avatar4 from '/public/img/avatars/avatar4.png';
 import Card from '@/components/card';
 import { IRoute } from '@/types/navigation';
 import { useContext } from 'react';
 import { ConfiguratorContext } from '@/contexts/ConfiguratorContext';
-import Image from 'next/image';
 import { RedoxLogo } from '@/components/icons/RedoxLogo';
+
+// Utility function to get initials from a name
+const getInitials = (name: string): string => {
+  return name
+    .split(' ')
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+};
 
 function SidebarHorizon(props: { routes: IRoute[]; [x: string]: any }) {
   const { routes, open, setOpen, variant, setHovered, hovered } = props;
   const context = useContext(ConfiguratorContext);
-  const { mini } = context;
+  const { mini, theme } = context;
   return (
     <div
       className={`sm:none ${
@@ -66,18 +75,19 @@ function SidebarHorizon(props: { routes: IRoute[]; [x: string]: any }) {
               <div className="mb-7 mt-[20px] h-px bg-gray-200 dark:bg-white/10" />
               {/* Nav item */}
               <ul>
-                <Links mini={mini} hovered={hovered} routes={routes} />
+                {React.createElement(React.Fragment, {}, 
+                  SidebarLinks({ mini, hovered, routes })
+                )}
               </ul>
             </div>
             <div className="mb-[30px] mt-[28px]">
               {/* Sidebar profile info */}
               <div className="mt-5 flex items-center justify-center gap-3">
-                <div className="relative h-12 w-12 overflow-hidden rounded-full bg-blue-200">
-                  <Image
-                    fill
-                    src={avatar4}
-                    alt="avatar"
-                  />
+                <div 
+                  className="flex h-12 w-12 items-center justify-center rounded-full text-white font-bold text-lg"
+                  style={{ backgroundColor: theme?.['--color-500'] || '#422AFB' }}
+                >
+                  {getInitials('Tim Gillam')}
                 </div>
                 <div
                   className={`ml-1 ${

@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import Dropdown from '@/components/dropdown';
 import { FiAlignJustify } from 'react-icons/fi';
 import NavLink from '@/components/link/NavLink';
-import navbarimage from '/public/img/layout/Navbar.png';
 import { BsArrowBarUp } from 'react-icons/bs';
 import { FiSearch } from 'react-icons/fi';
 import Configurator from './Configurator';
@@ -12,8 +11,18 @@ import {
   IoMdNotificationsOutline,
   IoMdInformationCircleOutline,
 } from 'react-icons/io';
-import avatar from '/public/img/avatars/avatar4.png';
-import Image from 'next/image';
+// Remove avatar import
+import { ConfiguratorContext } from '@/contexts/ConfiguratorContext';
+
+// Utility function to get initials from a name
+const getInitials = (name: string): string => {
+  return name
+    .split(' ')
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+};
 
 const FiSearchAny = FiSearch as any;
 
@@ -27,6 +36,9 @@ const Navbar = (props: {
   const [darkmode, setDarkmode] = React.useState(
     document.body.classList.contains('dark'),
   );
+  const context = useContext(ConfiguratorContext);
+  const { theme } = context;
+
   return (
     <nav
       className={`duration-175 linear fixed right-3 top-3 flex flex-row flex-wrap items-center justify-between rounded-xl bg-white/30 transition-all ${
@@ -160,13 +172,9 @@ const Navbar = (props: {
         {/* Profile & Dropdown */}
         <Dropdown
           button={
-            <div className="h-10 w-10 rounded-full overflow-hidden">
-              <Image
-                width={40}
-                height={40}
-                src={avatar}
-                alt="Elon Musk"
-              />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full text-white font-bold"
+                 style={{ backgroundColor: theme?.['--color-500'] || '#422AFB' }}>
+              {getInitials('Tim Gillam')}
             </div>
           }
           classNames={'py-2 top-8 -left-[180px] w-max'}
@@ -175,7 +183,7 @@ const Navbar = (props: {
               <div className="ml-4 mt-3">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-bold text-navy-700 dark:text-white">
-                    👋 Hey, Adela
+                    👋 Hey, Tim
                   </p>{' '}
                 </div>
               </div>
@@ -187,12 +195,6 @@ const Navbar = (props: {
                   className="text-sm text-gray-800 dark:text-white hover:dark:text-white"
                 >
                   Profile Settings
-                </a>
-                <a
-                  href=" "
-                  className="mt-3 text-sm text-gray-800 dark:text-white hover:dark:text-white"
-                >
-                  Newsletter Settings
                 </a>
                 <a
                   href=" "
