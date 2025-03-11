@@ -38,7 +38,7 @@ const DocumentViewer = ({
   const [activeTab, setActiveTab] = useState<'original' | 'extracted'>('original');
   const [activeSubTab, setActiveSubTab] = useState<'text' | 'elements' | 'comprehend' | 'textract'>('text');
   const [copySuccess, setCopySuccess] = useState(false);
-  const previewRef = useRef<string | null>(null);
+  const previewRef = useRef<{ url: string | null; fileName: string | null }>({ url: null, fileName: null });
   
   // Reset to original document tab when file changes
   useEffect(() => {
@@ -52,38 +52,40 @@ const DocumentViewer = ({
     }
   }, [currentStep]);
 
+  // Cleanup effect for preview URL
   useEffect(() => {
-    // Clean up function to revoke URLs when component unmounts
     return () => {
-      if (previewRef.current) {
-        URL.revokeObjectURL(previewRef.current);
+      if (previewRef.current.url) {
+        URL.revokeObjectURL(previewRef.current.url);
       }
     };
   }, []);
 
+  // Handle preview URL creation and cleanup
   useEffect(() => {
     if (!file) {
-      // Don't reset preview states if file hasn't changed
       return;
     }
 
-    // Create a preview URL for the file if we don't already have one for this file
-    // or if the file has changed
-    if (!preview || previewRef.current !== file.name) {
-      // Revoke previous URL if it exists
-      if (previewRef.current) {
-        URL.revokeObjectURL(preview as string);
+    // Only create a new preview URL if the file has changed
+    if (!preview || previewRef.current.fileName !== file.name) {
+      // Cleanup previous URL if it exists
+      if (previewRef.current.url) {
+        URL.revokeObjectURL(previewRef.current.url);
       }
 
       const objectUrl = URL.createObjectURL(file);
       setPreview(objectUrl);
-      previewRef.current = file.name; // Store the filename instead of the URL
+      previewRef.current = {
+        url: objectUrl,
+        fileName: file.name
+      };
     }
 
     // Check file type
     setIsImage(file.type.startsWith('image/'));
     setIsPdf(file.type === 'application/pdf');
-  }, [file, preview]);
+  }, [file]);
 
   // Determine if the file format is supported
   const isFormatSupported = file && (isImage || isPdf);
@@ -190,11 +192,13 @@ const DocumentViewer = ({
                           src={preview} 
                           alt="Document preview" 
                           className="max-w-full max-h-[400px] object-contain mx-auto"
-                          key={`${file.name}-${Date.now()}`}
+                          key={`${file.name}-${preview}`}
                           onLoad={(e) => {
                             const target = e.target as HTMLImageElement;
-                            if (target.complete) {
-                              setTimeout(() => URL.revokeObjectURL(target.src), 100);
+                            if (target.complete && target.src.startsWith('blob:')) {
+                              // Don't revoke the URL here as we need it for the preview
+                              // It will be cleaned up when the file changes or component unmounts
+                              console.log('Image loaded successfully');
                             }
                           }}
                         />
