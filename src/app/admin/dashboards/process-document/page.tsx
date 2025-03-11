@@ -170,7 +170,7 @@ const ProcessDocument = () => {
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
-                  Use text extraction
+                  Classify with LLM
                 </p>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 
@@ -217,7 +217,7 @@ const ProcessDocument = () => {
               </p>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-4 mt-4">
               <button
                 onClick={runSelectedAnalysis}
                 disabled={isAnalysing}
@@ -247,25 +247,6 @@ const ProcessDocument = () => {
                 </button>
               )}
             </div>
-            
-            {/* Show only a summary of analysis status here, details are in the right panel */}
-            {analysisResults.classification && (
-              <div className="mt-4 pt-4">
-                <div className="flex items-center mb-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-white">
-                    Analysis Complete
-                  </p>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Document classified as {analysisResults.classification.type}
-                  {analysisResults.classification.subType ? ` (${analysisResults.classification.subType})` : ''} with {(analysisResults.classification.confidence * 100).toFixed(0)}% confidence.
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  View full details in the Document Classification panel.
-                </p>
-              </div>
-            )}
           </div>
         );
       } else if (step.id === 3) { // Process step
