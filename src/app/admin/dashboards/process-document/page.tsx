@@ -217,20 +217,36 @@ const ProcessDocument = () => {
               </p>
             </div>
 
-            <button
-              onClick={runSelectedAnalysis}
-              disabled={isAnalysing}
-              className="mt-4 w-full flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isAnalysing ? (
-                <>
-                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-white inline-block"></span>
-                  Analysing...
-                </>
-              ) : (
-                <>{analysisResults.classification ? 'Reanalyse Document' : 'Analyse Document'}</>
+            <div className="flex gap-4">
+              <button
+                onClick={runSelectedAnalysis}
+                disabled={isAnalysing}
+                className={`mt-4 flex-1 flex items-center justify-center py-2 px-6 ${
+                  analysisResults.classification 
+                    ? 'bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none' 
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                } text-sm font-medium rounded-md focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isAnalysing ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-white inline-block"></span>
+                    Analysing...
+                  </>
+                ) : (
+                  <>{analysisResults.classification ? 'Reanalyse Document' : 'Analyse Document'}</>
+                )}
+              </button>
+              
+              {/* Next step button - Only show after analysis is complete */}
+              {analysisResults.classification && (
+                <button
+                  onClick={handleNextStep}
+                  className="mt-4 flex-1 flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none"
+                >
+                  Next <span className="ml-2">→</span>
+                </button>
               )}
-            </button>
+            </div>
             
             {/* Show only a summary of analysis status here, details are in the right panel */}
             {analysisResults.classification && (
@@ -284,7 +300,7 @@ const ProcessDocument = () => {
       
       return updatedStep;
     }));
-  }, [currentStep, selectedFile, analysisResults.classification, isAnalysing, autoClassify, useTextExtraction, scanForTFN]);
+  }, [currentStep, selectedFile, analysisResults.classification, isAnalysing, autoClassify, scanForTFN]);
 
   // Ensure state is synchronized between the dropdown controls and DocumentClassification
   useEffect(() => {
@@ -324,6 +340,36 @@ const ProcessDocument = () => {
       });
     }
   }, [analysisResults]);
+
+  // Add a useEffect to monitor changes to analysisResults
+  useEffect(() => {
+    console.log('analysisResults changed:', analysisResults);
+    // If we have classification results but they're not showing up in the UI,
+    // we can force a re-render with a state update
+    if (analysisResults.classification) {
+      console.log('We have classification data:', analysisResults.classification);
+    }
+  }, [analysisResults]);
+
+  // Add a separate useEffect for handling useTextExtraction changes
+  useEffect(() => {
+    // This will only update the UI elements that depend on useTextExtraction
+    // without forcing a re-render of the DocumentViewer
+    if (currentStep === 2) {
+      setWorkflowSteps(prevSteps => {
+        return prevSteps.map(step => {
+          if (step.id === 2) {
+            return {
+              ...step,
+              // Keep the same content, just update the props
+              content: step.content
+            };
+          }
+          return step;
+        });
+      });
+    }
+  }, [useTextExtraction]);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -371,8 +417,10 @@ const ProcessDocument = () => {
 
   // Update this function to receive and store analysis results
   const handleClassifyDocument = (results: AnalysisResults) => {
+    console.log('handleClassifyDocument called with:', results);
     // Store the analysis results received from the DocumentClassification component
     setAnalysisResults(results);
+    console.log('After setAnalysisResults:', results);
     setIsAnalysing(false);
     
     // Update the workflow steps to mark the current step as completed
@@ -470,12 +518,16 @@ const ProcessDocument = () => {
     // or store them in a different state variable for further processing
   };
 
-  // The analyze function from the dropdown
+  // Make sure our runSelectedAnalysis is properly handling the response data
   const runSelectedAnalysis = async () => {
     if (!selectedFile) return;
     
     setIsAnalysing(true);
-    const results: AnalysisResults = {};
+    // Start with a fresh results object
+    const results: AnalysisResults = {
+      // Clear any existing classification
+      classification: undefined
+    };
     
     try {
       // Create form data for sending the file
@@ -525,6 +577,7 @@ const ProcessDocument = () => {
         }
         
         const classificationResult = await classifyResponse.json();
+        console.log('AWS Classification result:', classificationResult);
         results.awsClassification = {
           type: classificationResult.dominant,
           subType: undefined,
@@ -538,6 +591,7 @@ const ProcessDocument = () => {
           confidence: classificationResult.dominantScore || 1.0,
           source: 'AWS Comprehend'
         };
+        console.log('Set classification from AWS:', results.classification);
       }
       
       // Step 3: If text extraction option is enabled, try to classify with LLM
@@ -556,6 +610,7 @@ const ProcessDocument = () => {
         
         if (llmResponse.ok) {
           const llmResult = await llmResponse.json();
+          console.log('LLM Classification result:', llmResult);
           results.gptClassification = {
             type: llmResult.documentType || llmResult.type || "",
             subType: llmResult.subType || "",
@@ -570,6 +625,7 @@ const ProcessDocument = () => {
             confidence: llmResult.confidence || 0.9,
             source: 'OpenAI'
           };
+          console.log('Set classification from LLM:', results.classification);
         } else {
           console.warn('LLM classification failed, keeping AWS classification if available');
         }
@@ -602,12 +658,20 @@ const ProcessDocument = () => {
         }
       }
       
+      // Ensure we have a valid classification object before updating state
+      if (results.classification) {
+        console.log('Final classification before state update:', results.classification);
+      } else {
+        console.warn('No classification data found after processing');
+      }
+      
       // Update analysis results state to ensure they are displayed in both components
-      setAnalysisResults(results);
+      console.log('Final results before setAnalysisResults:', results);
+      setAnalysisResults({...results});
       
       // Pass the results to the handler function
       // This will trigger the DocumentClassification component to update via props
-      handleClassifyDocument(results);
+      handleClassifyDocument({...results});
       
       // Force a re-render of all components by explicitly updating the state
       // This ensures both the workflow step content and DocumentClassification card are updated
@@ -629,7 +693,7 @@ const ProcessDocument = () => {
           return step;
         });
       });
-      
+        
     } catch (error) {
       console.error('Analysis failed:', error);
       setAnalysisResults({
@@ -695,171 +759,23 @@ const ProcessDocument = () => {
               />
             </div>
             
-            {/* Document Classification Card - This shows all document information */}
+            {/* Add DocumentClassification component above DocumentViewer */}
             {selectedFile && (
-              <Card extra="w-full mb-6 overflow-hidden">
-                {/* Card Header with Collapse Button */}
-                <div className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-navy-700">
-                  <div className="flex items-center">
-                    <h4 className="text-base font-bold text-navy-700 dark:text-white">
-                      Document Classification
-                    </h4>
-                  </div>
-                  <button 
-                    onClick={() => setIsClassificationCardExpanded(!isClassificationCardExpanded)}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                    aria-label={isClassificationCardExpanded ? "Collapse" : "Expand"}
-                  >
-                    {isClassificationCardExpanded ? (
-                      <MdKeyboardArrowUp size={20} />
-                    ) : (
-                      <MdKeyboardArrowDown size={20} />
-                    )}
-                  </button>
-                </div>
-                
-                {/* Collapsible Content */}
-                {isClassificationCardExpanded && (
-                  <div className="p-3">
-                    {/* File details - more compact with format indicator in same row */}
-                    <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 dark:bg-navy-700 rounded">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                          {selectedFile.name}
-                        </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          {getShortFileType(selectedFile.type)} • {Math.round(selectedFile.size / 1024)} KB
-                        </p>
-                      </div>
-                      <div>
-                        {isFormatSupported(selectedFile) ? (
-                          <ClickablePillLabel
-                            label="Supported Format"
-                            icon={<BsFillCheckCircleFill />}
-                            iconColor="text-green-500"
-                            bg="bg-[#C9FBD5] dark:!bg-navy-700"
-                            mb="mb-0"
-                            onClick={() => {}}
-                          />
-                        ) : (
-                          <ClickablePillLabel
-                            label="Unsupported Format"
-                            icon={<MdError />}
-                            iconColor="text-red-500"
-                            bg="bg-[#FDE0D0] dark:!bg-navy-700" 
-                            mb="mb-0"
-                            onClick={() => {}}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Document Classification Status */}
-                    <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 dark:bg-navy-700 rounded">
-                      <p className="text-sm font-medium text-gray-800 dark:text-white">
-                        Document Classification:
-                      </p>
-                      {analysisResults.classification ? (
-                        <ClickablePillLabel
-                          label={analysisResults.classification.type}
-                          icon={<BsFillCheckCircleFill />}
-                          iconColor="text-green-500"
-                          bg="bg-[#C9FBD5] dark:!bg-navy-700"
-                          mb="mb-0"
-                          onClick={() => {}}
-                        />
-                      ) : (
-                        <ClickablePillLabel
-                          label="Unclassified"
-                          icon={<MdWarning />}
-                          iconColor="text-amber-500"
-                          bg="bg-[#FFF6DA] dark:!bg-navy-700"
-                          mb="mb-0"
-                          onClick={() => {}}
-                        />
-                      )}
-                    </div>
-                    
-                    {/* Classification results - more compact with inline labels */}
-                    {analysisResults.classification ? (
-                      <>
-                        {/* Type and Sub-type on first row */}
-                        <div className="grid grid-cols-2 gap-x-2 gap-y-2 mb-3">
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Type:</p>
-                            <div className="inline-flex items-center">
-                              <p className="text-sm font-medium text-gray-800 dark:text-white">
-                                {analysisResults.classification.type || "undefined"}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Sub-type:</p>
-                            <p className="text-sm font-medium text-gray-800 dark:text-white">
-                              {analysisResults.classification.subType || "Unknown"}
-                            </p>
-                          </div>
-                          
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Confidence:</p>
-                            <p className="text-sm font-medium text-gray-800 dark:text-white">
-                              {(analysisResults.classification.confidence * 100).toFixed(0)}%
-                            </p>
-                          </div>
-                          
-                          <div className="flex flex-col">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Source:</p>
-                            <p className="text-sm font-medium text-gray-800 dark:text-white">
-                              {analysisResults.classification.source}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        {/* Status indicators - horizontal layout */}
-                        <div className="flex flex-wrap gap-2">
-                          {/* TFN Status */}
-                          {analysisResults.tfnDetection && (
-                            <div className="inline-flex items-center px-2 py-1 rounded bg-gray-50 dark:bg-navy-700">
-                              <div className={`w-2 h-2 rounded-full mr-1.5 ${
-                                analysisResults.tfnDetection.detected 
-                                  ? 'bg-amber-500' 
-                                  : 'bg-green-500'
-                              }`}></div>
-                              <p className="text-xs text-gray-700 dark:text-gray-300">
-                                {analysisResults.tfnDetection.detected
-                                  ? `TFN: ${analysisResults.tfnDetection.count} found`
-                                  : "No TFNs detected"}
-                              </p>
-                            </div>
-                          )}
-                          
-                          {/* Text Extraction Status */}
-                          {analysisResults.textExtraction && (
-                            <div className="inline-flex items-center px-2 py-1 rounded bg-gray-50 dark:bg-navy-700">
-                              <div className={`w-2 h-2 rounded-full mr-1.5 ${
-                                analysisResults.textExtraction.success 
-                                  ? 'bg-green-500' 
-                                  : 'bg-red-500'
-                              }`}></div>
-                              <p className="text-xs text-gray-700 dark:text-gray-300">
-                                {analysisResults.textExtraction.success
-                                  ? "Text successfully extracted"
-                                  : "Text extraction failed"}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center py-2">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Document not yet classified
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
+              <Card extra="w-full mb-6 p-6">
+                <h3 className="text-xl font-bold mb-4 text-navy-700 dark:text-white">Document Classification</h3>
+                <DocumentClassification 
+                  file={selectedFile}
+                  onClassify={handleClassifyDocument}
+                  initialResults={analysisResults}
+                  onNext={handleNextStep}
+                  onCancel={() => setCurrentStep(1)}
+                  autoClassify={autoClassify}
+                  useTextExtraction={useTextExtraction}
+                  scanForTFN={scanForTFN}
+                  setAutoClassify={setAutoClassify}
+                  setUseTextExtraction={setUseTextExtraction}
+                  setScanForTFN={setScanForTFN}
+                />
               </Card>
             )}
             

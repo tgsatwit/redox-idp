@@ -63,25 +63,27 @@ const DocumentViewer = ({
 
   useEffect(() => {
     if (!file) {
-      setIsImage(false);
-      setIsPdf(false);
+      // Don't reset preview states if file hasn't changed
       return;
     }
 
-    // Revoke previous URL if it exists
-    if (previewRef.current) {
-      URL.revokeObjectURL(previewRef.current);
-    }
+    // Create a preview URL for the file if we don't already have one for this file
+    // or if the file has changed
+    if (!preview || previewRef.current !== file.name) {
+      // Revoke previous URL if it exists
+      if (previewRef.current) {
+        URL.revokeObjectURL(preview as string);
+      }
 
-    // Create a preview URL for the file
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-    previewRef.current = objectUrl;
+      const objectUrl = URL.createObjectURL(file);
+      setPreview(objectUrl);
+      previewRef.current = file.name; // Store the filename instead of the URL
+    }
 
     // Check file type
     setIsImage(file.type.startsWith('image/'));
     setIsPdf(file.type === 'application/pdf');
-  }, [file]);
+  }, [file, preview]);
 
   // Determine if the file format is supported
   const isFormatSupported = file && (isImage || isPdf);
@@ -141,7 +143,7 @@ const DocumentViewer = ({
       
       {/* Main tabs */}
       <div className="my-4">
-        <div className="flex w-full justify-start gap-8 px-6 overflow-hidden">
+        <div className="flex w-full justify-start gap-8 overflow-hidden">
           <div
             onClick={() => setActiveTab('original')}
             className={

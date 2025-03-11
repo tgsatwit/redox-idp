@@ -318,6 +318,111 @@ const DocumentClassification = ({
           )}
         </div>
       </div>
+
+      {/* Document Classification Status */}
+      <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 dark:bg-navy-700 rounded">
+        <p className="text-sm font-medium text-gray-800 dark:text-white">
+          Document Classification:
+        </p>
+        {analysisResults.classification ? (
+          <ClickablePillLabel
+            label={analysisResults.classification.type}
+            icon={<BsFillCheckCircleFill />}
+            iconColor="text-green-500"
+            bg="bg-[#C9FBD5] dark:!bg-navy-700"
+            mb="mb-0"
+            onClick={() => {}}
+          />
+        ) : (
+          <ClickablePillLabel
+            label="Unclassified"
+            icon={<MdWarning />}
+            iconColor="text-amber-500"
+            bg="bg-[#FFF6DA] dark:!bg-navy-700"
+            mb="mb-0"
+            onClick={() => {}}
+          />
+        )}
+      </div>
+
+        {/* Classification results - more compact with inline labels */}
+        {analysisResults.classification ? (
+        <>
+          {/* Type and Sub-type on first row */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-2 mb-3">
+            <div className="flex flex-col">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Type:</p>
+              <div className="inline-flex items-center">
+                <p className="text-sm font-medium text-gray-800 dark:text-white">
+                  {analysisResults.classification.type || "undefined"}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Sub-type:</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-white">
+                {analysisResults.classification.subType || "Unknown"}
+              </p>
+            </div>
+            
+            <div className="flex flex-col">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Confidence:</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-white">
+                {(analysisResults.classification.confidence * 100).toFixed(0)}%
+              </p>
+            </div>
+            
+            <div className="flex flex-col">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Source:</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-white">
+                {analysisResults.classification.source}
+              </p>
+            </div>
+          </div>
+          
+          {/* Status indicators - horizontal layout */}
+          <div className="flex flex-wrap gap-2">
+            {/* TFN Status */}
+            {analysisResults.tfnDetection && (
+              <div className="inline-flex items-center px-2 py-1 rounded bg-gray-50 dark:bg-navy-700">
+                <div className={`w-2 h-2 rounded-full mr-1.5 ${
+                  analysisResults.tfnDetection.detected 
+                    ? 'bg-amber-500' 
+                    : 'bg-green-500'
+                }`}></div>
+                <p className="text-xs text-gray-700 dark:text-gray-300">
+                  {analysisResults.tfnDetection.detected
+                    ? `TFN: ${analysisResults.tfnDetection.count} found`
+                    : "No TFNs detected"}
+                </p>
+              </div>
+            )}
+            
+            {/* Text Extraction Status */}
+            {analysisResults.textExtraction && (
+              <div className="inline-flex items-center px-2 py-1 rounded bg-gray-50 dark:bg-navy-700">
+                <div className={`w-2 h-2 rounded-full mr-1.5 ${
+                  analysisResults.textExtraction.success 
+                    ? 'bg-green-500' 
+                    : 'bg-red-500'
+                }`}></div>
+                <p className="text-xs text-gray-700 dark:text-gray-300">
+                  {analysisResults.textExtraction.success
+                    ? "Text successfully extracted"
+                    : "Text extraction failed"}
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+        ) : (
+          <div className="text-center py-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Document not yet classified
+            </p>
+          </div>
+      )}
       
       {/* Only show classification UI if not already classified or if manual classification is enabled */}
       {(!isClassified || manualClassificationEnabled) && (
@@ -371,113 +476,6 @@ const DocumentClassification = ({
               </div>
             </div>
           )}
-          
-          {/* Analysis options */}
-          <div className="grid grid-cols-1 gap-3 mb-4">
-            {/* Auto-classify option */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-800 dark:text-white">
-                  Auto-classify
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Detect document type using AWS
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={autoClassifyValue} 
-                  onChange={toggleAutoClassify} 
-                  className="sr-only peer"
-                />
-                <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
-                  autoClassifyValue 
-                    ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
-                    : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
-                  } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
-                  after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-              </label>
-            </div>
-            
-            {/* Text extraction option */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-800 dark:text-white">
-                  Text extraction
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Extract text using GPT
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={useTextExtractionValue} 
-                  onChange={toggleUseTextExtraction} 
-                  className="sr-only peer"
-                />
-                <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
-                  useTextExtractionValue 
-                    ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
-                    : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
-                  } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
-                  after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-              </label>
-            </div>
-            
-            {/* TFN scanning option */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-800 dark:text-white">
-                  Scan for TFN
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Detect Tax File Numbers
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={scanForTFNValue} 
-                  onChange={toggleScanForTFN} 
-                  className="sr-only peer"
-                />
-                <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
-                  scanForTFNValue 
-                    ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
-                    : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
-                  } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
-                  after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-              </label>
-            </div>
-          </div>
-          
-          {/* Analyse button */}
-          <button
-            onClick={runSelectedProcesses}
-            disabled={isAnalysing}
-            className="w-full flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isAnalysing ? (
-              <>
-                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-white inline-block"></span>
-                Analysing...
-              </>
-            ) : (
-              <>Analyse Document</>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Loading indicator during analysis */}
-      {isAnalysing && (
-        <div className="my-4">
-          <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg flex items-center">
-            <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-t-2 border-indigo-600 dark:border-indigo-400"></div>
-            <span className="ml-2 text-indigo-700 dark:text-indigo-300">Analysing document...</span>
-          </div>
         </div>
       )}
     </div>
