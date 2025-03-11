@@ -249,7 +249,7 @@ const ProcessDocument = () => {
                     Analysing...
                   </>
                 ) : (
-                  <>{analysisResults.classification ? 'Reanalyse Document' : 'Analyse Document'}</>
+                  <>{analysisResults.classification ? 'Re-analyse Document' : 'Analyse Document'}</>
                 )}
               </button>
               

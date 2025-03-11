@@ -312,14 +312,14 @@ const DocumentViewer = ({
                 )}
 
                 {activeSubTab === 'elements' && (
-                  <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-4">
-                    <div className="max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-navy-600 scrollbar-track-transparent space-y-4">
+                  <div className="p-4">
+                    <div className="max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-navy-600 scrollbar-track-transparent space-y-4 pr-6">
                       {classificationResults?.extractedFields?.map((field, index) => (
                         <div key={index} className="bg-white dark:bg-navy-700 rounded-lg p-4">
-                          <div className="flex justify-between items-center mb-2">
+                          <div className="flex justify-between items-center mb-1">
                             <span className="font-medium text-gray-900 dark:text-white">{field.label || field.id}</span>
                             <span className="text-sm text-gray-500 dark:text-gray-400">
-                              Confidence: {(field.confidence * 100).toFixed(2)}%
+                              Confidence: {((field.confidence * 100) / 100).toFixed(1)}%
                             </span>
                           </div>
                           <p className="text-gray-700 dark:text-gray-300">{field.value || field.text}</p>

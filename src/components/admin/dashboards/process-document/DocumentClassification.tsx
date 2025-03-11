@@ -726,15 +726,6 @@ const DocumentClassification = ({
             </div>
           </div>
         )}
-
-      {/* "Not yet classified" message - show when not classified and not in manual override mode */}
-      {!isClassified && !manualClassifyOverride && (
-        <div className="text-center py-3 bg-white dark:bg-navy-800 rounded-lg shadow-sm border border-gray-100 dark:border-navy-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Document not yet classified
-          </p>
-        </div>
-      )}
     </div>
   );
 };
