@@ -24,6 +24,12 @@ export async function POST(request: NextRequest) {
   console.log("Extract text API called");
   try {
     const { text, availableTypes, fileName } = await request.json();
+    
+    console.log('LLM API received:', {
+      textLength: text?.length,
+      availableTypes: availableTypes,
+      fileName
+    });
 
     if (!text) {
       return NextResponse.json(
@@ -49,6 +55,8 @@ export async function POST(request: NextRequest) {
       
       return `- ${type.name}${type.description ? `: ${type.description}` : ''}${subTypeInfo}`;
     }).join('\n');
+
+    console.log('Prepared types info for LLM:', typesInfo);
 
     // Create a prompt for GPT
     const prompt = `As a document classification expert, analyze this document text and classify it.
@@ -97,6 +105,7 @@ Return your analysis in JSON format:
     
     try {
       const parsedResponse = JSON.parse(gptResponse);
+      console.log('LLM Response:', parsedResponse);
       
       // Return the classification results
       return NextResponse.json({

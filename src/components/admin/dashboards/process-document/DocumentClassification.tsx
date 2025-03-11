@@ -7,6 +7,19 @@ import ClickablePillLabel from '@/components/admin/main/others/pill-labels/Click
 import DocumentViewer from './DocumentViewer';
 import Switch from '@/components/switch';
 
+interface DocumentType {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface DocumentSubType {
+  id: string;
+  name: string;
+  description?: string;
+  documentTypeId: string;
+}
+
 interface DocumentClassificationProps {
   file?: File;
   onCancel?: () => void;
@@ -19,6 +32,14 @@ interface DocumentClassificationProps {
   setAutoClassify?: (value: boolean) => void;
   setUseTextExtraction?: (value: boolean) => void;
   setScanForTFN?: (value: boolean) => void;
+}
+
+// Define a helper type for processed document types
+interface ProcessedDocumentType {
+  id: string;
+  name: string;
+  description: string;
+  subTypes: DocumentSubType[];
 }
 
 const DocumentClassification = ({ 
@@ -48,10 +69,10 @@ const DocumentClassification = ({
   const setUseTextExtractionValue = externalSetUseTextExtraction || setInternalUseTextExtraction;
   const setScanForTFNValue = externalSetScanForTFN || setInternalScanForTFN;
   
-  const [isClassified, setIsClassified] = useState(!!initialResults.classification);
-  const [documentType, setDocumentType] = useState<string>(initialResults.classification?.type || 'ID Document');
-  const [documentSubType, setDocumentSubType] = useState<string>(initialResults.classification?.subType || 'Passport');
-  const [analysisResult, setAnalysisResult] = useState<string | null>(initialResults.textractAnalyzeId || null);
+  const [isClassified, setIsClassified] = useState(false);
+  const [documentType, setDocumentType] = useState<string>('');
+  const [documentSubType, setDocumentSubType] = useState<string>('');
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [manualClassificationEnabled, setManualClassificationEnabled] = useState(false);
   const [analysisResults, setAnalysisResults] = useState<{
@@ -63,7 +84,12 @@ const DocumentClassification = ({
     textractAnalyzeId?: string;
     rawTextractData?: any;
     extractedFields?: any[];
-  }>(initialResults);
+  }>({});
+  
+  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
+  const [documentSubTypes, setDocumentSubTypes] = useState<DocumentSubType[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   // Update internal state when initialResults prop changes
   useEffect(() => {
@@ -96,36 +122,139 @@ const DocumentClassification = ({
   // Determine if the file format is supported
   const isFormatSupported = file && (file.type.startsWith('image/') || file.type === 'application/pdf');
 
-  // Mock document type options
-  const documentTypeOptions = [
-    "ID Document",
-    "Financial Document",
-    "Medical Record",
-    "Legal Document",
-    "Other"
-  ];
-
-  // Mock sub-type options based on document type
-  const getSubTypeOptions = (type: string) => {
-    switch (type) {
-      case "ID Document":
-        return ["Passport", "Driver's License", "National ID", "Birth Certificate"];
-      case "Financial Document":
-        return ["Invoice", "Bank Statement", "Tax Return", "Receipt"];
-      case "Medical Record":
-        return ["Prescription", "Medical Report", "Insurance Claim", "Lab Result"];
-      case "Legal Document":
-        return ["Contract", "Affidavit", "Power of Attorney", "Court Order"];
-      default:
-        return ["General", "Miscellaneous"];
+  // Fetch document types from DynamoDB
+  const fetchDocumentTypes = async () => {
+    try {
+      const response = await fetch('/api/update-config/document-types');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch document types');
+      }
+      const data = await response.json();
+      // If data items don't have an 'id' property, assume they are strings and convert them
+      const convertedData =
+        Array.isArray(data) && data.length > 0 && (!data[0].id)
+          ? data.map((name: string) => ({ id: name, name, description: '', subTypes: [] }))
+          : data;
+      setDocumentTypes(convertedData);
+      return convertedData;
+    } catch (error) {
+      console.error('Error fetching document types:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load document types');
+      return [];
     }
   };
 
+  // Fetch sub-types for a specific document type
+  const fetchSubTypes = async (docTypeId: string) => {
+    try {
+      const response = await fetch(`/api/update-config/document-types/${docTypeId}/sub-types`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch sub-types');
+      }
+      const data = await response.json();
+      setDocumentSubTypes(data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching sub-types:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load document sub-types');
+      return [];
+    }
+  };
+
+  // Load document types on component mount
+  useEffect(() => {
+    const loadDocumentTypes = async () => {
+      setIsLoadingTypes(true);
+      setLoadError(null);
+      try {
+        console.log('Loading document types...');
+        const types = await fetchDocumentTypes();
+        console.log('Loaded document types:', types);
+
+        if (types.length > 0) {
+          setDocumentType(types[0].name);
+          console.log('Loading sub-types for:', types[0].id);
+          const subTypes = await fetchSubTypes(types[0].id);
+          console.log('Loaded sub-types:', subTypes);
+          setDocumentSubTypes(subTypes);
+        } else {
+          setLoadError('No document types found');
+        }
+      } catch (error) {
+        console.error('Error loading document types:', error);
+        setLoadError(error instanceof Error ? error.message : 'Failed to load document types');
+      } finally {
+        setIsLoadingTypes(false);
+      }
+    };
+
+    loadDocumentTypes();
+  }, []);
+
+  // Load sub-types when document type changes
+  useEffect(() => {
+    const loadSubTypes = async () => {
+      setIsLoadingTypes(true);
+      setLoadError(null);
+      try {
+        const selectedType = documentTypes.find(type => type.name === documentType);
+        if (selectedType) {
+          console.log('Loading sub-types for document type:', selectedType.id);
+          const subTypes = await fetchSubTypes(selectedType.id);
+          console.log('Loaded sub-types:', subTypes);
+          setDocumentSubTypes(subTypes);
+
+          if (subTypes.length > 0) {
+            setDocumentSubType(subTypes[0].name);
+          } else {
+            console.log('No sub-types found for document type:', selectedType.id);
+            setDocumentSubTypes([]);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading sub-types:', error);
+        setLoadError(error instanceof Error ? error.message : 'Failed to load document sub-types');
+      } finally {
+        setIsLoadingTypes(false);
+      }
+    };
+
+    if (documentType && documentTypes.length > 0) {
+      loadSubTypes();
+    }
+  }, [documentType, documentTypes]);
+
   // Handle change of document type
-  const handleDocumentTypeChange = (type: string) => {
-    setDocumentType(type);
-    // Reset subtype to the first option when type changes
-    setDocumentSubType(getSubTypeOptions(type)[0]);
+  const handleDocumentTypeChange = (typeName: string) => {
+    setDocumentType(typeName);
+    // Sub-types will be loaded by the useEffect above
+  };
+
+  // Update the classification state and UI
+  const updateClassification = (classification: { type: string; subType: string; confidence: number; source: string }) => {
+    if (!classification?.type) return;
+
+    // Update the analysis results
+    const updatedResults = {
+      ...analysisResults,
+      classification: {
+        type: classification.type,
+        subType: classification.subType || '',
+        confidence: classification.confidence,
+        source: classification.source
+      }
+    };
+    
+    setAnalysisResults(updatedResults);
+    setIsClassified(true);
+    setDocumentType(classification.type);
+    setDocumentSubType(classification.subType || '');
+    
+    if (onClassify) {
+      onClassify(updatedResults);
+    }
   };
 
   // Function to run all selected processes
@@ -134,6 +263,7 @@ const DocumentClassification = ({
     
     setIsAnalysing(true);
     setAnalysisResults({});
+    setIsClassified(false);
     const results: any = {};
     
     try {
@@ -158,81 +288,120 @@ const DocumentClassification = ({
         text: textractData.extractedText
       };
       
-      // Store the raw Textract response for the JSON tab
+      // Store the raw Textract response and extracted fields
       results.rawTextractData = textractData.textractResponse;
-      
-      // Store any extracted fields
-      if (textractData.extractedFields && textractData.extractedFields.length > 0) {
+      if (textractData.extractedFields?.length > 0) {
         results.extractedFields = textractData.extractedFields;
       }
-
-      // Store the Textract Job ID if available
       if (textractData.textractResponse?.JobId) {
         results.textractAnalyzeId = textractData.textractResponse.JobId;
       }
       
-      // Step 2: If auto-classify is enabled, use AWS Comprehend for classification
+      // Step 2: AWS Comprehend Classification
       if (autoClassifyValue) {
+        const classifyFormData = new FormData();
+        classifyFormData.append('file', file);
+        
+        // Create proper document type config for Comprehend
+        const comprehendDocTypes = documentTypes.map(type => ({
+          id: type.id,
+          name: type.name,
+          subTypes: documentSubTypes
+            .filter(subType => subType.documentTypeId === type.id)
+            .map(subType => ({
+              id: subType.id,
+              name: subType.name
+            }))
+        }));
+        
+        classifyFormData.append('documentTypes', JSON.stringify(comprehendDocTypes));
+        
         const classifyResponse = await fetch('/api/docs-2-analyse/classify-comprehend', {
           method: 'POST',
-          body: formData
+          body: classifyFormData
         });
         
-        if (!classifyResponse.ok) {
-          const errorData = await classifyResponse.json();
-          throw new Error(errorData.error || 'Classification failed');
+        if (classifyResponse.ok) {
+          const classificationResult = await classifyResponse.json();
+          
+          // Find the matching document type
+          const matchedType = documentTypes.find(type => 
+            type.name.toLowerCase() === classificationResult.dominant.toLowerCase()
+          );
+          
+          if (matchedType) {
+            // Find available sub-types for this document type
+            const availableSubTypes = documentSubTypes.filter(
+              subType => subType.documentTypeId === matchedType.id
+            );
+            
+            const classification = {
+              type: matchedType.name,
+              subType: availableSubTypes.length > 0 ? availableSubTypes[0].name : '',
+              confidence: classificationResult.dominantScore || 1.0,
+              source: 'AWS Comprehend'
+            };
+            
+            updateClassification(classification);
+          }
         }
-        
-        const classificationResult = await classifyResponse.json();
-        results.awsClassification = {
-          type: classificationResult.dominant,
-          subType: null,
-          confidence: classificationResult.dominantScore || 1.0
-        };
-        
-        // Set the main classification result using AWS result
-        results.classification = {
-          type: classificationResult.dominant,
-          subType: "",
-          confidence: classificationResult.dominantScore || 1.0,
-          source: 'AWS Comprehend'
-        };
       }
       
-      // Step 3: If text extraction option is enabled, try to classify with LLM
+      // Step 3: LLM Classification
       if (useTextExtractionValue) {
+        const documentTypeConfig = documentTypes.map((type) => ({
+          id: type.id,
+          name: type.name,
+          description: type.description || '',
+          subTypes: documentSubTypes
+            .filter((subType) => subType.documentTypeId === type.id)
+            .map((subType) => ({
+              id: subType.id,
+              name: subType.name,
+              description: subType.description || ''
+            }))
+        }));
+
+        console.log('Structured document types sent to LLM:', JSON.stringify(documentTypeConfig, null, 2));
+
         const llmResponse = await fetch('/api/docs-2-analyse/classify-llm', {
           method: 'POST',
           body: JSON.stringify({
             text: textractData.extractedText,
-            availableTypes: documentTypeOptions,
+            availableTypes: documentTypeConfig,
             fileName: file.name
           }),
           headers: {
             'Content-Type': 'application/json'
           }
         });
-        
+
         if (llmResponse.ok) {
           const llmResult = await llmResponse.json();
-          results.gptClassification = {
-            type: llmResult.documentType || llmResult.type || "",
-            subType: llmResult.subType || "",
-            reasoning: llmResult.reasoning || ""
-          };
-          
-          // Override the main classification result with LLM result if available
-          results.classification = {
-            type: llmResult.documentType || llmResult.type || "",
-            subType: llmResult.subType || "",
+          console.log('LLM Classification Result:', llmResult);
+
+          const matchedType = documentTypeConfig.find((type) =>
+            type.name.toLowerCase() === (llmResult.documentType || '').toLowerCase()
+          );
+
+          const matchedSubType = matchedType?.subTypes.find((subType) =>
+            subType.name.toLowerCase() === (llmResult.subType || '').toLowerCase()
+          );
+
+          const classification = {
+            type: matchedType?.name || llmResult.documentType || 'Unknown',
+            subType: matchedSubType?.name || llmResult.subType || '',
+            confidence: llmResult.confidence || 0.9,
             source: 'OpenAI'
           };
+
+          updateClassification(classification);
         } else {
-          console.warn('LLM classification failed, keeping AWS classification if available');
+          console.error('LLM classification failed:', await llmResponse.text());
         }
       }
       
-      // Step 4: If scan for TFN is enabled, check for TFNs
+      // Step 4: TFN Detection
       if (scanForTFNValue) {
         const tfnResponse = await fetch('/api/docs-2-analyse/scan-for-tfn', {
           method: 'POST',
@@ -250,26 +419,15 @@ const DocumentClassification = ({
             detected: tfnResult.tfnIdentified,
             count: tfnResult.tfnCount || 0
           };
-        } else {
-          console.warn('TFN detection failed');
-          results.tfnDetection = {
-            detected: false,
-            error: 'TFN detection failed'
-          };
         }
       }
       
-      setAnalysisResults(results);
-      setIsClassified(true);
       setAnalysisResult('ANALYSIS_COMPLETE');
-      
-      if (onClassify) {
-        onClassify(results);
-      }
       
     } catch (error) {
       console.error('Analysis failed:', error);
       setAnalysisResult('ERROR');
+      setIsClassified(false);
     } finally {
       setIsAnalysing(false);
     }
@@ -294,21 +452,19 @@ const DocumentClassification = ({
   
   // Function to handle manual classification
   const applyManualClassification = () => {
-    const updatedResults = {...analysisResults};
-    updatedResults.classification = {
+    const classification = {
       type: documentType,
       subType: documentSubType,
-      confidence: 1.0, // Full confidence for manual classification
+      confidence: 1.0,
       source: 'Manual'
     };
     
-    setAnalysisResults(updatedResults);
-    setIsClassified(true);
-    
-    if (onClassify) {
-      onClassify(updatedResults);
-    }
+    updateClassification(classification);
   };
+  
+  // Replace the documentTypeOptions and getSubTypeOptions with the fetched data
+  const availableDocumentTypes = documentTypes.map(type => type.name);
+  const availableSubTypes = documentSubTypes.map(subType => subType.name);
   
   return (
     <div className="space-y-4">
@@ -498,17 +654,23 @@ const DocumentClassification = ({
                           Document Type
                         </label>
                         <div className="relative">
-                          <select
-                            value={documentType}
-                            onChange={(e) => handleDocumentTypeChange(e.target.value)}
-                            className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
-                          >
-                            {documentTypeOptions.map((type) => (
-                              <option key={type} value={type}>
-                                {type}
-                              </option>
-                            ))}
-                          </select>
+                          {isLoadingTypes ? (
+                            <div className="block w-full rounded-md border-gray-300 bg-gray-100 dark:bg-navy-700 py-2 pl-3 pr-10 text-gray-500">
+                              Loading...
+                            </div>
+                          ) : (
+                            <select
+                              value={documentType}
+                              onChange={(e) => handleDocumentTypeChange(e.target.value)}
+                              className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
+                            >
+                              {availableDocumentTypes.map((type) => (
+                                <option key={type} value={type}>
+                                  {type}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
                             <MdKeyboardArrowDown size={20} />
                           </div>
@@ -520,23 +682,35 @@ const DocumentClassification = ({
                           Document Sub-type
                         </label>
                         <div className="relative">
-                          <select
-                            value={documentSubType}
-                            onChange={(e) => setDocumentSubType(e.target.value)}
-                            className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
-                          >
-                            {getSubTypeOptions(documentType).map((subType) => (
-                              <option key={subType} value={subType}>
-                                {subType}
-                              </option>
-                            ))}
-                          </select>
+                          {isLoadingTypes ? (
+                            <div className="block w-full rounded-md border-gray-300 bg-gray-100 dark:bg-navy-700 py-2 pl-3 pr-10 text-gray-500">
+                              Loading...
+                            </div>
+                          ) : (
+                            <select
+                              value={documentSubType}
+                              onChange={(e) => setDocumentSubType(e.target.value)}
+                              className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
+                            >
+                              {availableSubTypes.map((subType) => (
+                                <option key={subType} value={subType}>
+                                  {subType}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
                             <MdKeyboardArrowDown size={20} />
                           </div>
                         </div>
                       </div>
                     </div>
+                    
+                    {loadError && (
+                      <div className="text-sm text-red-600 dark:text-red-400">
+                        {loadError}
+                      </div>
+                    )}
                     
                     <div className="flex justify-end">
                       <button

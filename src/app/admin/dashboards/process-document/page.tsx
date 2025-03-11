@@ -55,6 +55,19 @@ interface AnalysisResults {
   rawTextractData?: any;
 }
 
+interface DocumentType {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface DocumentSubType {
+  id: string;
+  name: string;
+  description?: string;
+  documentTypeId: string;
+}
+
 const ProcessDocument = () => {
   const [selectedFile, setSelectedFile] = useState<File | undefined>(undefined);
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -496,11 +509,26 @@ const ProcessDocument = () => {
       
       // Step 3: If text extraction option is enabled, try to classify with LLM
       if (useTextExtraction && textractData.extractedText) {
+        const documentTypeConfig = documentTypes.map((type) => ({
+          id: type.id,
+          name: type.name,
+          description: type.description || '',
+          subTypes: documentSubTypes
+            .filter((subType) => subType.documentTypeId === type.id)
+            .map((subType) => ({
+              id: subType.id,
+              name: subType.name,
+              description: subType.description || ''
+            }))
+        }));
+
+        console.log('Structured document types sent to LLM:', JSON.stringify(documentTypeConfig, null, 2));
+
         const llmResponse = await fetch('/api/docs-2-analyse/classify-llm', {
           method: 'POST',
           body: JSON.stringify({
             text: textractData.extractedText,
-            availableTypes: ["ID Document", "Financial Document", "Medical Record", "Legal Document", "Other"],
+            availableTypes: documentTypeConfig,
             fileName: selectedFile.name
           }),
           headers: {
@@ -624,6 +652,31 @@ const ProcessDocument = () => {
     setScanForTFN,
     ref: documentClassificationRef
   };
+
+  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
+  const [documentSubTypes, setDocumentSubTypes] = useState<DocumentSubType[]>([]);
+
+  useEffect(() => {
+    const fetchDocumentTypes = async () => {
+      try {
+        const response = await fetch('/api/update-config/document-types');
+        if (!response.ok) throw new Error('Failed to fetch document types');
+        const types = await response.json();
+        setDocumentTypes(types);
+
+        if (types.length > 0) {
+          const subTypesResponse = await fetch(`/api/update-config/document-types/${types[0].id}/sub-types`);
+          if (!subTypesResponse.ok) throw new Error('Failed to fetch sub-types');
+          const subTypes = await subTypesResponse.json();
+          setDocumentSubTypes(subTypes);
+        }
+      } catch (error) {
+        console.error('Error fetching document types or sub-types:', error);
+      }
+    };
+
+    fetchDocumentTypes();
+  }, []);
 
   return (
     <div className="mt-6 flex w-full flex-col items-center bg-white dark:bg-navy-900 py-4">
