@@ -119,29 +119,32 @@ const ProcessDocument = () => {
     return parts.length > 1 ? parts[0] + '/' + parts[1] : mimeType;
   };
   
-  // Update workflow steps when dependencies change
+  // Consolidate workflow steps management into a single effect
   useEffect(() => {
     setWorkflowSteps(prevSteps => prevSteps.map(step => {
-      // First determine the basic status of the step
-      const updatedStep = {
+      const baseStep = {
         ...step,
-        completed: step.id < currentStep,
+        completed: step.id < currentStep || (step.id === 2 && !!analysisResults.classification),
         locked: step.id === 1 
           ? false 
           : step.id === 2 
             ? !selectedFile 
             : step.id === 3 
-              ? currentStep < 3 || !analysisResults.classification 
+              ? !analysisResults.classification 
               : currentStep < 4,
         selected: step.id === currentStep
       };
-      
-      // Now add step-specific content
-      if (step.id === 2) { // Analyse step
-        updatedStep.content = (
+
+      if (step.id === 2) {
+        const handleToggle = (currentValue: boolean, setter: (value: boolean) => void) => {
+          // Use setTimeout to ensure state updates don't conflict
+          setTimeout(() => {
+            setter(!currentValue);
+          }, 0);
+        };
+
+        baseStep.content = (
           <div className="p-4 rounded-lg">
-          
-            {/* Only include the three main options */}
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
@@ -151,7 +154,7 @@ const ProcessDocument = () => {
                   <input 
                     type="checkbox" 
                     checked={autoClassify}
-                    onChange={() => setAutoClassify(!autoClassify)} 
+                    onChange={() => handleToggle(autoClassify, setAutoClassify)}
                     className="sr-only peer"
                   />
                   <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
@@ -176,7 +179,7 @@ const ProcessDocument = () => {
                   <input 
                     type="checkbox" 
                     checked={useTextExtraction}
-                    onChange={() => setUseTextExtraction(!useTextExtraction)} 
+                    onChange={() => handleToggle(useTextExtraction, setUseTextExtraction)}
                     className="sr-only peer"
                   />
                   <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
@@ -201,7 +204,7 @@ const ProcessDocument = () => {
                   <input 
                     type="checkbox" 
                     checked={scanForTFN}
-                    onChange={() => setScanForTFN(!scanForTFN)} 
+                    onChange={() => handleToggle(scanForTFN, setScanForTFN)}
                     className="sr-only peer"
                   />
                   <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
@@ -237,7 +240,6 @@ const ProcessDocument = () => {
                 )}
               </button>
               
-              {/* Next step button - Only show after analysis is complete */}
               {analysisResults.classification && (
                 <button
                   onClick={handleNextStep}
@@ -249,112 +251,29 @@ const ProcessDocument = () => {
             </div>
           </div>
         );
-      } else if (step.id === 3) { // Process step
-        updatedStep.content = (
-          <div>
-            <h3 className="text-xl font-bold mb-4 text-navy-700 dark:text-white">Text Extraction</h3>
-            <button
-              onClick={handleExtractText}
-              disabled={isAnalysing}
-              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isAnalysing ? 'Processing...' : 'Extract Text'}
-            </button>
-          </div>
-        );
-      } else if (step.id === 4) { // Finalise step
-        updatedStep.content = (
-          <div>
-            <h3 className="text-xl font-bold mb-4 text-navy-700 dark:text-white">Document Finalisation</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Your document has been processed successfully. You can now download the results.
-            </p>
-            <button
-              onClick={() => console.log('Downloading results...')}
-              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-700"
-            >
-              Download Results
-            </button>
-          </div>
-        );
       }
       
-      return updatedStep;
+      return baseStep;
     }));
-  }, [currentStep, selectedFile, analysisResults.classification, isAnalysing, autoClassify, scanForTFN]);
+  }, [
+    currentStep,
+    selectedFile,
+    analysisResults.classification,
+    isAnalysing,
+    autoClassify,
+    useTextExtraction,
+    scanForTFN
+  ]);
 
-  // Ensure state is synchronized between the dropdown controls and DocumentClassification
+  // Keep this effect for auto-classify synchronization
   useEffect(() => {
     if (analysisResults.classification) {
       setAutoClassify(true);
     }
   }, [analysisResults.classification]);
 
-  // Update workflow steps when file is selected
-  useEffect(() => {
-    if (selectedFile) {
-      setWorkflowSteps(prevSteps => {
-        return prevSteps.map(step => {
-          if (step.id === 1) {
-            return { ...step, completed: true };
-          } else if (step.id === 2) {
-            return { ...step, locked: false };
-          }
-          return step;
-        });
-      });
-    }
-  }, [selectedFile]);
-  
-  // Update workflow steps when analysis results change
-  useEffect(() => {
-    if (analysisResults.classification) {
-      setWorkflowSteps(prevSteps => {
-        return prevSteps.map(step => {
-          if (step.id === 2) {
-            return { ...step, completed: true };
-          } else if (step.id === 3) {
-            return { ...step, locked: false };
-          }
-          return step;
-        });
-      });
-    }
-  }, [analysisResults]);
-
-  // Add a useEffect to monitor changes to analysisResults
-  useEffect(() => {
-    console.log('analysisResults changed:', analysisResults);
-    // If we have classification results but they're not showing up in the UI,
-    // we can force a re-render with a state update
-    if (analysisResults.classification) {
-      console.log('We have classification data:', analysisResults.classification);
-    }
-  }, [analysisResults]);
-
-  // Add a separate useEffect for handling useTextExtraction changes
-  useEffect(() => {
-    // This will only update the UI elements that depend on useTextExtraction
-    // without forcing a re-render of the DocumentViewer
-    if (currentStep === 2) {
-      setWorkflowSteps(prevSteps => {
-        return prevSteps.map(step => {
-          if (step.id === 2) {
-            return {
-              ...step,
-              // Keep the same content, just update the props
-              content: step.content
-            };
-          }
-          return step;
-        });
-      });
-    }
-  }, [useTextExtraction]);
-
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
-    // Automatically move to the next step when a file is uploaded
     if (currentStep === 1) {
       setCurrentStep(2);
     }
