@@ -76,7 +76,7 @@ const WorkflowStepperCard = ({
         {/* Steps list */}
         <div className="flex flex-col bg-white dark:bg-navy-800">
           {steps.map((step) => (
-            <div key={step.id} className="flex flex-col">
+            <div key={step.id} className="flex flex-col border-b border-b-2 dark:border-b-navy-700">
               <div 
                 onClick={() => handleStepClick(step)}
                 className={`
@@ -154,7 +154,7 @@ const WorkflowStepperCard = ({
                     ${expandedStepId === step.id ? 'max-h-[1200px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}
                   `}
                 >
-                  <div className="px-6 py-4 bg-gray-50 dark:bg-navy-800">
+                  <div className="px-6 py-4 bg-gray-50 dark:bg-navy-900">
                     {step.content}
                   </div>
                 </div>

@@ -68,6 +68,19 @@ const ProcessDocument = () => {
   const [isAnalysing, setIsAnalysing] = useState<boolean>(false);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResults>({});
   const [activeDataTab, setActiveDataTab] = useState<'extractedText' | 'awsResponse'>('extractedText');
+  
+  // Add state variables for Process Document options
+  const [identifyRequiredData, setIdentifyRequiredData] = useState<boolean>(true);
+  const [redactElements, setRedactElements] = useState<boolean>(false);
+  const [createSummary, setCreateSummary] = useState<boolean>(false);
+  const [saveOriginalDocument, setSaveOriginalDocument] = useState<boolean>(true);
+  const [saveRedactedDocument, setSaveRedactedDocument] = useState<boolean>(false);
+  const [originalRetentionPolicy, setOriginalRetentionPolicy] = useState<string>('');
+  const [redactedRetentionPolicy, setRedactedRetentionPolicy] = useState<string>('');
+  const [retentionPolicies, setRetentionPolicies] = useState<Array<{id: string, name: string, description?: string, duration: number}>>([]);
+  const [isLoadingPolicies, setIsLoadingPolicies] = useState<boolean>(false);
+  const [policiesError, setPoliciesError] = useState<string | null>(null);
+  
   const [workflowSteps, setWorkflowSteps] = useState([
     {
       id: 1,
@@ -151,7 +164,7 @@ const ProcessDocument = () => {
         };
 
         baseStep.content = (
-          <div className="p-4 rounded-lg">
+          <div className="p-4">
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
@@ -260,6 +273,223 @@ const ProcessDocument = () => {
         );
       }
       
+      // Add content for Process Document step (step 3)
+      if (step.id === 3) {
+        const handleToggle = (currentValue: boolean, setter: (value: boolean) => void) => {
+          // Use setTimeout to ensure state updates don't conflict
+          setTimeout(() => {
+            setter(!currentValue);
+          }, 0);
+        };
+
+        baseStep.content = (
+          <div className="p-4">
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  Identify Required Data Elements
+                </p>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={identifyRequiredData}
+                    onChange={() => handleToggle(identifyRequiredData, setIdentifyRequiredData)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
+                    identifyRequiredData 
+                      ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
+                      : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
+                    } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+                    after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                </label>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Identify and extract data elements
+              </p>
+            </div>
+            
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  Redact Elements
+                </p>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={redactElements}
+                    onChange={() => handleToggle(redactElements, setRedactElements)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
+                    redactElements 
+                      ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
+                      : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
+                    } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+                    after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                </label>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Redact sensitive information
+              </p>
+            </div>
+            
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  Create Summary
+                </p>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={createSummary}
+                    onChange={() => handleToggle(createSummary, setCreateSummary)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
+                    createSummary 
+                      ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
+                      : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
+                    } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+                    after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                </label>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Generate a document summary
+              </p>
+            </div>
+            
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  Save Original Document
+                </p>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={saveOriginalDocument}
+                    onChange={() => handleToggle(saveOriginalDocument, setSaveOriginalDocument)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
+                    saveOriginalDocument 
+                      ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
+                      : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
+                    } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+                    after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                </label>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Save the original document with retention policy
+              </p>
+              
+              {saveOriginalDocument && (
+                <div className="mt-2 px-4 border-l-2 border-indigo-200">
+                  <p className="font-medium text-gray-800 dark:text-white text-sm mb-1">Original Document Retention Policy:</p>
+                  <select 
+                    value={originalRetentionPolicy} 
+                    onChange={(e) => setOriginalRetentionPolicy(e.target.value)}
+                    className="w-full p-2 border border-gray-300 dark:border-navy-700 rounded-md bg-white dark:bg-navy-800 
+                    text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={isLoadingPolicies}
+                  >
+                    <option value="">Select Retention Policy</option>
+                    {isLoadingPolicies ? (
+                      <option value="" disabled>Loading policies...</option>
+                    ) : policiesError ? (
+                      <option value="" disabled>Error loading policies</option>
+                    ) : (
+                      retentionPolicies.map(policy => (
+                        <option key={policy.id} value={policy.id}>
+                          {policy.name} {policy.description ? `- ${policy.description}` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {policiesError && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Failed to load policies: {policiesError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  Save Redacted Document
+                </p>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={saveRedactedDocument}
+                    onChange={() => handleToggle(saveRedactedDocument, setSaveRedactedDocument)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
+                    saveRedactedDocument 
+                      ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
+                      : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
+                    } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+                    after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                </label>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Save the redacted document with retention policy
+              </p>
+              
+              {saveRedactedDocument && (
+                <div className="mt-2 px-4 border-l-2 border-indigo-200">
+                  <p className="font-medium text-gray-800 dark:text-white text-sm mb-1">Redacted Document Retention Policy:</p>
+                  <select 
+                    value={redactedRetentionPolicy} 
+                    onChange={(e) => setRedactedRetentionPolicy(e.target.value)}
+                    className="w-full p-2 border border-gray-300 dark:border-navy-700 rounded-md bg-white dark:bg-navy-800 
+                    text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={isLoadingPolicies}
+                  >
+                    <option value="">Select Retention Policy</option>
+                    {isLoadingPolicies ? (
+                      <option value="" disabled>Loading policies...</option>
+                    ) : policiesError ? (
+                      <option value="" disabled>Error loading policies</option>
+                    ) : (
+                      retentionPolicies.map(policy => (
+                        <option key={policy.id} value={policy.id}>
+                          {policy.name} {policy.description ? `- ${policy.description}` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {policiesError && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Failed to load policies: {policiesError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-4 mt-4">
+              <button
+                onClick={handlePreviousStep}
+                className="mt-4 flex-1 flex items-center justify-center py-2 px-6 border border-gray-300 text-gray-700 dark:text-white dark:border-navy-600 text-sm font-medium rounded-md hover:bg-gray-50 dark:hover:bg-navy-800 focus:outline-none"
+              >
+                <span className="mr-2">←</span> Previous
+              </button>
+              
+              <button
+                onClick={handleNextStep}
+                className="mt-4 flex-1 flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none"
+              >
+                Next <span className="ml-2">→</span>
+              </button>
+            </div>
+          </div>
+        );
+      }
+      
       return baseStep;
     }));
   }, [
@@ -269,7 +499,15 @@ const ProcessDocument = () => {
     isAnalysing,
     autoClassify,
     useTextExtraction,
-    scanForTFN
+    scanForTFN,
+    // Add dependencies for the Process Document options
+    identifyRequiredData,
+    redactElements,
+    createSummary,
+    saveOriginalDocument,
+    saveRedactedDocument,
+    originalRetentionPolicy,
+    redactedRetentionPolicy
   ]);
 
   // Keep this effect for auto-classify synchronization
@@ -670,6 +908,29 @@ const ProcessDocument = () => {
     };
 
     fetchDocumentTypes();
+  }, []);
+
+  // Add useEffect to fetch retention policies from DynamoDB
+  useEffect(() => {
+    const fetchRetentionPolicies = async () => {
+      setIsLoadingPolicies(true);
+      setPoliciesError(null);
+      try {
+        const response = await fetch('/api/update-config/retention-policies');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch retention policies: ${response.status}`);
+        }
+        const policies = await response.json();
+        setRetentionPolicies(policies);
+      } catch (error) {
+        console.error('Error fetching retention policies:', error);
+        setPoliciesError(error instanceof Error ? error.message : 'Unknown error');
+      } finally {
+        setIsLoadingPolicies(false);
+      }
+    };
+
+    fetchRetentionPolicies();
   }, []);
 
   return (
