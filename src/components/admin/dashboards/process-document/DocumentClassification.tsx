@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import Card from '@/components/card';
-import { MdClose, MdDocumentScanner, MdWarning, MdKeyboardArrowDown } from 'react-icons/md';
+import { MdClose, MdDocumentScanner, MdWarning, MdKeyboardArrowDown, MdKeyboardArrowUp } from 'react-icons/md';
 import { BsFillCheckCircleFill } from 'react-icons/bs';
 import { MdError } from 'react-icons/md';
 import ClickablePillLabel from '@/components/admin/main/others/pill-labels/ClickablePillLabel';
 import DocumentViewer from './DocumentViewer';
+import Switch from '@/components/switch';
 
 interface DocumentClassificationProps {
   file?: File;
@@ -36,6 +37,8 @@ const DocumentClassification = ({
   const [internalAutoClassify, setInternalAutoClassify] = useState(true);
   const [internalUseTextExtraction, setInternalUseTextExtraction] = useState(false);
   const [internalScanForTFN, setInternalScanForTFN] = useState(false);
+  const [manualClassifyOverride, setManualClassifyOverride] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   
   const autoClassifyValue = externalAutoClassify !== undefined ? externalAutoClassify : internalAutoClassify;
   const useTextExtractionValue = externalUseTextExtraction !== undefined ? externalUseTextExtraction : internalUseTextExtraction;
@@ -215,7 +218,6 @@ const DocumentClassification = ({
           results.gptClassification = {
             type: llmResult.documentType || llmResult.type || "",
             subType: llmResult.subType || "",
-            confidence: llmResult.confidence || 0.9,
             reasoning: llmResult.reasoning || ""
           };
           
@@ -223,7 +225,6 @@ const DocumentClassification = ({
           results.classification = {
             type: llmResult.documentType || llmResult.type || "",
             subType: llmResult.subType || "",
-            confidence: llmResult.confidence || 0.9,
             source: 'OpenAI'
           };
         } else {
@@ -285,33 +286,69 @@ const DocumentClassification = ({
   const toggleScanForTFN = () => {
     setScanForTFNValue(!scanForTFNValue);
   };
+
+  // Toggle manual classification override
+  const toggleManualClassify = () => {
+    setManualClassifyOverride(!manualClassifyOverride);
+  };
+  
+  // Function to handle manual classification
+  const applyManualClassification = () => {
+    const updatedResults = {...analysisResults};
+    updatedResults.classification = {
+      type: documentType,
+      subType: documentSubType,
+      confidence: 1.0, // Full confidence for manual classification
+      source: 'Manual'
+    };
+    
+    setAnalysisResults(updatedResults);
+    setIsClassified(true);
+    
+    if (onClassify) {
+      onClassify(updatedResults);
+    }
+  };
   
   return (
-    <div>
-      {/* File details section - always show */}
-      <div className="mb-4 bg-gray-50 dark:bg-navy-700 p-3 rounded-lg">
-        <p className="text-base font-medium text-gray-800 dark:text-white mb-1">
-          {fileName}
-        </p>
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-            {getShortFileType(fileType)} • {fileSize}
-          </p>
-          {isFormatSupported ? (
-            <ClickablePillLabel
-              label="Supported Format"
-              icon={<BsFillCheckCircleFill />}
-              iconColor="text-green-500"
-              bg="bg-[#C9FBD5] dark:!bg-navy-700"
-              mb="mb-0"
-              onClick={() => {}}
-            />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+          >
+            {isCollapsed ? <MdKeyboardArrowDown size={20} /> : <MdKeyboardArrowUp size={20} />}
+          </button>
+          <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Classification</h3>
+        </div>
+        <div>
+          {analysisResults.classification ? (
+            analysisResults.classification.type === 'undefined' ? (
+              <ClickablePillLabel
+                label="undefined"
+                icon={<MdError />}
+                iconColor="text-red-500"
+                bg="bg-[#FDE0D0] dark:!bg-navy-700"
+                mb="mb-0"
+                onClick={() => {}}
+              />
+            ) : (
+              <ClickablePillLabel
+                label={analysisResults.classification.type}
+                icon={<BsFillCheckCircleFill />}
+                iconColor="text-green-500"
+                bg="bg-[#C9FBD5] dark:!bg-navy-700"
+                mb="mb-0"
+                onClick={() => {}}
+              />
+            )
           ) : (
             <ClickablePillLabel
-              label="Unsupported Format"
-              icon={<MdError />}
-              iconColor="text-red-500"
-              bg="bg-[#FDE0D0] dark:!bg-navy-700"
+              label="Unclassified"
+              icon={<MdWarning />}
+              iconColor="text-amber-500"
+              bg="bg-[#FFF6DA] dark:!bg-navy-700"
               mb="mb-0"
               onClick={() => {}}
             />
@@ -319,163 +356,209 @@ const DocumentClassification = ({
         </div>
       </div>
 
-      {/* Document Classification Status */}
-      <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 dark:bg-navy-700 rounded">
-        <p className="text-sm font-medium text-gray-800 dark:text-white">
-          Document Classification:
-        </p>
-        {analysisResults.classification ? (
-          <ClickablePillLabel
-            label={analysisResults.classification.type}
-            icon={<BsFillCheckCircleFill />}
-            iconColor="text-green-500"
-            bg="bg-[#C9FBD5] dark:!bg-navy-700"
-            mb="mb-0"
-            onClick={() => {}}
-          />
-        ) : (
-          <ClickablePillLabel
-            label="Unclassified"
-            icon={<MdWarning />}
-            iconColor="text-amber-500"
-            bg="bg-[#FFF6DA] dark:!bg-navy-700"
-            mb="mb-0"
-            onClick={() => {}}
-          />
-        )}
-      </div>
-
-        {/* Classification results - more compact with inline labels */}
-        {analysisResults.classification ? (
-        <>
-          {/* Type and Sub-type on first row */}
-          <div className="grid grid-cols-2 gap-x-2 gap-y-2 mb-3">
-            <div className="flex flex-col">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Type:</p>
-              <div className="inline-flex items-center">
-                <p className="text-sm font-medium text-gray-800 dark:text-white">
-                  {analysisResults.classification.type || "undefined"}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Sub-type:</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white">
-                {analysisResults.classification.subType || "Unknown"}
-              </p>
-            </div>
-            
-            <div className="flex flex-col">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Confidence:</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white">
-                {(analysisResults.classification.confidence * 100).toFixed(0)}%
-              </p>
-            </div>
-            
-            <div className="flex flex-col">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Source:</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white">
-                {analysisResults.classification.source}
-              </p>
-            </div>
-          </div>
-          
-          {/* Status indicators - horizontal layout */}
-          <div className="flex flex-wrap gap-2">
-            {/* TFN Status */}
-            {analysisResults.tfnDetection && (
-              <div className="inline-flex items-center px-2 py-1 rounded bg-gray-50 dark:bg-navy-700">
-                <div className={`w-2 h-2 rounded-full mr-1.5 ${
-                  analysisResults.tfnDetection.detected 
-                    ? 'bg-amber-500' 
-                    : 'bg-green-500'
-                }`}></div>
-                <p className="text-xs text-gray-700 dark:text-gray-300">
-                  {analysisResults.tfnDetection.detected
-                    ? `TFN: ${analysisResults.tfnDetection.count} found`
-                    : "No TFNs detected"}
-                </p>
-              </div>
-            )}
-            
-            {/* Text Extraction Status */}
-            {analysisResults.textExtraction && (
-              <div className="inline-flex items-center px-2 py-1 rounded bg-gray-50 dark:bg-navy-700">
-                <div className={`w-2 h-2 rounded-full mr-1.5 ${
-                  analysisResults.textExtraction.success 
-                    ? 'bg-green-500' 
-                    : 'bg-red-500'
-                }`}></div>
-                <p className="text-xs text-gray-700 dark:text-gray-300">
-                  {analysisResults.textExtraction.success
-                    ? "Text successfully extracted"
-                    : "Text extraction failed"}
-                </p>
-              </div>
-            )}
-          </div>
-        </>
-        ) : (
-          <div className="text-center py-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Document not yet classified
-            </p>
-          </div>
-      )}
-      
-      {/* Only show classification UI if not already classified or if manual classification is enabled */}
-      {(!isClassified || manualClassificationEnabled) && (
-        <div className="mb-4">
-          {/* Classification controls (only if user needs to manually classify) */}
-          {(!autoClassifyValue || manualClassificationEnabled) && (
-            <div className="mb-4">
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Document Type
-                </label>
-                <div className="relative">
-                  <select
-                    value={documentType}
-                    onChange={(e) => handleDocumentTypeChange(e.target.value)}
-                    className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
-                  >
-                    {documentTypeOptions.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
-                    <MdKeyboardArrowDown size={20} />
-                  </div>
+      {/* File details section - always show */}
+        {!isCollapsed && (
+          <div className="bg-white dark:bg-navy-900 rounded p-4">
+            {/* File details section */}
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-600 dark:text-white">
+                    {fileName}
+                  </p>
+                  <span className="text-gray-400 dark:text-gray-500">•</span>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-400">
+                    {getShortFileType(fileType)} • {fileSize}
+                  </p>
                 </div>
+                {isFormatSupported ? (
+                  <ClickablePillLabel
+                    label="Supported Format"
+                    icon={<BsFillCheckCircleFill />}
+                    iconColor="text-green-500"
+                    bg="bg-[#C9FBD5] dark:!bg-navy-700"
+                    mb="mb-0"
+                    onClick={() => {}}
+                  />
+                ) : (
+                  <ClickablePillLabel
+                    label="Unsupported Format"
+                    icon={<MdError />}
+                    iconColor="text-red-500"
+                    bg="bg-[#FDE0D0] dark:!bg-navy-700"
+                    mb="mb-0"
+                    onClick={() => {}}
+                  />
+                )}
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Document Sub-type
-                </label>
-                <div className="relative">
-                  <select
-                    value={documentSubType}
-                    onChange={(e) => setDocumentSubType(e.target.value)}
-                    disabled={autoClassifyValue && !manualClassificationEnabled && isClassified}
-                    className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
-                  >
-                    {getSubTypeOptions(documentType).map((subType) => (
-                      <option key={subType} value={subType}>
-                        {subType}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
-                    <MdKeyboardArrowDown size={20} />
-                  </div>
+              {/* Status indicators */}
+              <div className="flex flex-wrap gap-2">
+                {/* Text Extraction Status */}
+                <div className="inline-flex items-center px-2 py-1 rounded">
+                  <div className={`w-2 h-2 rounded-full mr-1.5 ${
+                    !analysisResults.textExtraction
+                      ? 'bg-amber-500'
+                      : analysisResults.textExtraction.success 
+                        ? 'bg-green-500'
+                        : 'bg-red-500'
+                  }`}></div>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">
+                    {!analysisResults.textExtraction
+                      ? "Text extraction pending"
+                      : analysisResults.textExtraction.success
+                        ? "Text successfully extracted"
+                        : "Text extraction failed"}
+                  </p>
+                </div>
+                
+                {/* TFN Status */}
+                <div className="inline-flex items-center px-2 py-1 rounded">
+                  <div className={`w-2 h-2 rounded-full mr-1.5 ${
+                    !analysisResults.tfnDetection
+                      ? 'bg-amber-500'
+                      : analysisResults.tfnDetection.detected 
+                        ? 'bg-amber-500'
+                        : 'bg-green-500'
+                  }`}></div>
+                  <p className="text-xs text-gray-700 dark:text-gray-300">
+                    {!analysisResults.tfnDetection
+                      ? "TFN detection pending"
+                      : analysisResults.tfnDetection.detected
+                        ? `TFN: ${analysisResults.tfnDetection.count} found`
+                        : "No TFNs detected"}
+                  </p>
                 </div>
               </div>
             </div>
-          )}
+
+            {/* Document Classification section */}
+            <div className="border-t border-gray-100 dark:border-navy-600">
+              <div className="p-4">
+                <p className="text-sm font-medium text-gray-800 dark:text-white mb-4">
+                  Current Classification:
+                </p>
+
+                {/* Classification Results */}
+                {analysisResults.classification && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 mb-4">
+                    <div className="flex flex-col">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Type:</p>
+                      <div className="inline-flex items-center">
+                        <p className="text-sm font-medium text-gray-800 dark:text-white">
+                          {analysisResults.classification.type || "undefined"}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Sub-type:</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-white">
+                        {analysisResults.classification.subType || "Unknown"}
+                      </p>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Confidence:</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-white">
+                        {analysisResults.classification.confidence 
+                          ? `${(analysisResults.classification.confidence * 100).toFixed(0)}%` 
+                          : '100%'}
+                      </p>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Source:</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-white">
+                        {analysisResults.classification.source}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Manual Classification Toggle */}
+                <div className="flex items-center border-t border-gray-100 dark:border-navy-600 pt-4">
+                  <label htmlFor="manual-classify" className="text-sm text-gray-600 dark:text-gray-300 mr-2">
+                    Manually Classify/Override
+                  </label>
+                  <Switch 
+                    id="manual-classify"
+                    checked={manualClassifyOverride}
+                    onChange={toggleManualClassify}
+                    color="indigo"
+                  />
+                </div>
+
+                {/* Manual Classification UI */}
+                {manualClassifyOverride && (
+                  <div className="mt-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Document Type
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={documentType}
+                            onChange={(e) => handleDocumentTypeChange(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
+                          >
+                            {documentTypeOptions.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
+                            <MdKeyboardArrowDown size={20} />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Document Sub-type
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={documentSubType}
+                            onChange={(e) => setDocumentSubType(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 bg-white dark:bg-navy-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm appearance-none [&::-ms-expand]:hidden"
+                          >
+                            {getSubTypeOptions(documentType).map((subType) => (
+                              <option key={subType} value={subType}>
+                                {subType}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
+                            <MdKeyboardArrowDown size={20} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-end">
+                      <button
+                        onClick={applyManualClassification}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        Apply Classification
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* "Not yet classified" message - show when not classified and not in manual override mode */}
+      {!isClassified && !manualClassifyOverride && (
+        <div className="text-center py-3 bg-white dark:bg-navy-800 rounded-lg shadow-sm border border-gray-100 dark:border-navy-700">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Document not yet classified
+          </p>
         </div>
       )}
     </div>

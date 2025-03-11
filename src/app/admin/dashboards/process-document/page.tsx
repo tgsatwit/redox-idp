@@ -762,7 +762,6 @@ const ProcessDocument = () => {
             {/* Add DocumentClassification component above DocumentViewer */}
             {selectedFile && (
               <Card extra="w-full mb-6 p-6">
-                <h3 className="text-xl font-bold mb-4 text-navy-700 dark:text-white">Document Classification</h3>
                 <DocumentClassification 
                   file={selectedFile}
                   onClassify={handleClassifyDocument}
