@@ -10,14 +10,8 @@ import {
   MdCloudUpload, 
   MdSearch, 
   MdAutorenew, 
-  MdCheckCircle,
-  MdKeyboardArrowUp,
-  MdKeyboardArrowDown,
-  MdWarning
+  MdCheckCircle
 } from 'react-icons/md';
-import { BsFillCheckCircleFill } from 'react-icons/bs';
-import { MdError } from 'react-icons/md';
-import ClickablePillLabel from '@/components/admin/main/others/pill-labels/ClickablePillLabel';
 
 // Define interface for analysis results
 interface AnalysisResults {

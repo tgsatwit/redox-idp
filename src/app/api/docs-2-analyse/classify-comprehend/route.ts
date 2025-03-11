@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { 
   ComprehendClient, 
+  ClassifyDocumentCommand,  
   DetectDominantLanguageCommand, 
   DetectEntitiesCommand,
   DetectSentimentCommand,
@@ -222,6 +223,27 @@ export async function POST(request: Request) {
         } as DetectSentimentCommandOutput;
       }
 
+      // Classify the document - use first 5000 bytes max
+      let classificationResponse;
+      try {
+        const classificationSample = truncateForComprehend(fileText, 4800);
+        classificationResponse = await comprehendClient.send(
+          new ClassifyDocumentCommand({
+            Text: classificationSample,
+            EndpointArn: process.env.APP_COMPREHEND_CLASSIFIER_ARN!
+          })
+        );
+      } catch (classificationError: any) {
+        console.warn("Document classification failed:", classificationError);
+        classificationResponse = { Classes: [] };
+      }
+
+      // Extract classification results
+      const classificationResults: ClassificationResult[] = classificationResponse.Classes?.map(cls => ({
+        name: cls.Name || 'UNKNOWN',
+        score: cls.Score || 0
+      })) || [];
+
       // Group entities by type
       const entityCounts: Record<string, number> = {};
       const entityScores: Record<string, number> = {};
@@ -246,8 +268,8 @@ export async function POST(request: Request) {
         score: entityScores[type]
       })).sort((a, b) => b.count - a.count);
       
-      // Determine dominant document type
-      const dominant = entityTypes.length > 0 ? entityTypes[0].name : 'UNKNOWN';
+      // Determine dominant document type and confidence
+      const dominantEntity = entityTypes.length > 0 ? entityTypes[0] : { name: 'UNKNOWN', score: 1 };
 
       // Create classification results
       const classes: ClassificationResult[] = entityTypes.map(entity => ({
@@ -258,8 +280,10 @@ export async function POST(request: Request) {
       // Send the response
       return NextResponse.json({
         success: true,
-        dominant,
+        dominant: dominantEntity.name,
+        confidence: dominantEntity.score,
         classes,
+        classificationResults,
         sentiment: sentimentResponse.Sentiment,
         sentimentScores: sentimentResponse.SentimentScore,
         languageCode: detectedLangCode || 'en',
