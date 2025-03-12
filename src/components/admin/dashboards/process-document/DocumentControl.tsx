@@ -261,6 +261,102 @@ const DroppableElement = ({
   );
 };
 
+// Custom Droppable Element for the "Add Data Element" functionality
+const DroppableCustomElement = ({ 
+  element, 
+  index,
+  onRemoveMatch,
+  onDelete
+}: { 
+  element: {
+    id: string;
+    field: ExtractedField | null;
+    matched: boolean;
+  }, 
+  index: number,
+  onRemoveMatch?: (elementId: string) => void,
+  onDelete?: (elementId: string) => void
+}) => {
+  const { isOver, setNodeRef } = useDroppable({
+    id: element.id as UniqueIdentifier,
+    data: {
+      type: 'custom-element',
+      elementId: element.id,
+    },
+    disabled: element.matched, // Can't drop on already matched elements
+  });
+  
+  return (
+    <div 
+      ref={setNodeRef}
+      className={`flex items-center justify-between p-2 rounded-md ${
+        element.matched 
+          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30' 
+          : 'bg-white dark:bg-navy-800 border-2 border-dashed border-gray-300 dark:border-gray-700'
+      } ${
+        !element.matched ? (
+          isOver 
+            ? 'border-indigo-500 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/10' 
+            : 'hover:border-indigo-300 dark:hover:border-indigo-700'
+        ) : ''
+      } transition-colors duration-200`}
+    >
+      <div className="flex items-center">
+        {element.matched ? (
+          <MdCheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mr-2" />
+        ) : (
+          <MdDragIndicator className="w-5 h-5 text-gray-400 flex-shrink-0 mr-2" />
+        )}
+        <span className="font-medium text-navy-700 dark:text-white text-sm">
+          {element.matched && element.field?.name 
+            ? element.field.name 
+            : `Custom Element ${index + 1}`}
+        </span>
+      </div>
+      
+      <div className="flex items-center">
+        {element.matched && element.field && (
+          <>
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 max-w-[150px] truncate mr-2">
+              {element.field.value || element.field.text || 'No value'}
+            </span>
+            
+            <div className="flex mr-6">
+              {onRemoveMatch && (
+                <button
+                  onClick={() => onRemoveMatch(element.id)}
+                  className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-navy-700"
+                  title="Remove match"
+                >
+                  <MdClose className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        
+        {!element.matched && (
+          <div className="flex items-center">
+            <span className="text-xs text-gray-500 mr-2">
+              {isOver ? "Drop to match" : "Drop field here"}
+            </span>
+            
+            {onDelete && (
+              <button
+                onClick={() => onDelete(element.id)}
+                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-navy-700"
+                title="Delete custom element"
+              >
+                <MdClose className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const DocumentControl = ({
   documentType,
   documentSubType,
@@ -304,6 +400,13 @@ const DocumentControl = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5; // Show 5 items per page
+  
+  // New state for custom elements
+  const [customElements, setCustomElements] = useState<Array<{
+    id: string;
+    field: ExtractedField | null;
+    matched: boolean;
+  }>>([]);
   
   // Setup sensors for drag and drop
   const sensors = useSensors(
@@ -866,6 +969,26 @@ const DocumentControl = ({
         }
       }
     }
+    // Check if we're dropping onto a custom element
+    else if (over.data.current?.type === 'custom-element') {
+      const customElementId = over.data.current.elementId;
+      const fieldId = active.data.current?.id;
+      
+      if (customElementId && fieldId) {
+        const field = extractedFields.find(f => 
+          (f.id && f.id === fieldId) || 
+          (f.name && f.name === fieldId) || 
+          `field-${extractedFields.indexOf(f)}` === fieldId
+        );
+        
+        if (field) {
+          // We need to manually redraw after drag completes to ensure UI updates correctly
+          setTimeout(() => {
+            matchFieldToCustomElement(customElementId, field);
+          }, 0);
+        }
+      }
+    }
     // Check if we're dropping into the unmatched fields container
     else if (over.id === 'unmatched-fields-container') {
       // No action needed, field is already unmatched
@@ -1090,6 +1213,74 @@ const DocumentControl = ({
     return removedRequiredElements.has(elementId);
   };
 
+  // Function to add a custom element
+  const addCustomElement = () => {
+    const newElementId = `custom-element-${Date.now()}`;
+    
+    // Add a new custom element to the state
+    setCustomElements(prev => [
+      ...prev, 
+      {
+        id: newElementId,
+        field: null,
+        matched: false
+      }
+    ]);
+    
+    // Force update to re-render the UI
+    setForceUpdate(prev => prev + 1);
+  };
+  
+  // Function to handle a field being dropped on a custom element
+  const matchFieldToCustomElement = (customElementId: string, field: ExtractedField) => {
+    setCustomElements(prev => {
+      const updated = prev.map(element => {
+        if (element.id === customElementId) {
+          return {
+            ...element,
+            field,
+            matched: true
+          };
+        }
+        return element;
+      });
+      
+      return updated;
+    });
+    
+    // Force a re-render to ensure UI updates
+    setForceUpdate(prev => prev + 1);
+  };
+  
+  // Remove a custom element match
+  const removeCustomElementMatch = (customElementId: string) => {
+    setCustomElements(prev => {
+      const updated = prev.map(element => {
+        if (element.id === customElementId) {
+          return {
+            ...element,
+            field: null,
+            matched: false
+          };
+        }
+        return element;
+      });
+      
+      return updated;
+    });
+    
+    // Force a re-render to ensure UI updates
+    setForceUpdate(prev => prev + 1);
+  };
+  
+  // Delete a custom element
+  const deleteCustomElement = (customElementId: string) => {
+    setCustomElements(prev => prev.filter(element => element.id !== customElementId));
+    
+    // Force a re-render to ensure UI updates
+    setForceUpdate(prev => prev + 1);
+  };
+
   return (
     <Card extra="w-full p-6">
       <div className="flex items-center justify-between">
@@ -1307,11 +1498,11 @@ const DocumentControl = ({
                   </div>
                   
                   <div className="flex flex-col gap-4">
-                    {/* Required Data Elements - now in the right column, top */}
+                    {/* Combined Data Elements Section */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          Required Data Elements
+                          Data Elements
                         </h4>
                         <button
                           onClick={handleApplyRedactions}
@@ -1334,12 +1525,13 @@ const DocumentControl = ({
                           )}
                         </button>
                       </div>
-                      <div className="rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                      <div className="rounded-lg p-3 max-h-[550px] overflow-y-auto">
                         <div className="grid grid-cols-1 gap-2">
+                          {/* All elements - both required and optional */}
                           {matchedElements
-                            .filter(match => match.element.required && !removedRequiredElements.has(match.element.id))
+                            .filter(match => !removedRequiredElements.has(match.element.id))
                             .map((match, index) => (
-                              <div key={match.element.id || `req-${index}`} className="relative group">
+                              <div key={match.element.id || `element-${index}`} className="relative group">
                                 <DroppableElement
                                   match={match}
                                   index={index}
@@ -1347,59 +1539,55 @@ const DocumentControl = ({
                                   isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
                                   onSelectForRedaction={toggleElementRedaction}
                                 />
-                                <button
-                                  onClick={() => toggleRequiredElementRemoval(match.element.id)}
-                                  className="absolute top-2 right-2 p-1 rounded-full bg-gray-200 dark:bg-navy-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-navy-500 z-10"
-                                  title="Remove required element"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </button>
+                                {match.element.required && (
+                                  <button
+                                    onClick={() => toggleRequiredElementRemoval(match.element.id)}
+                                    className="absolute top-2 right-2 p-1 rounded-full bg-gray-200 dark:bg-navy-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-navy-500 z-10"
+                                    title="Remove required element"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
                             ))}
+                            
+                          {/* Custom elements */}
+                          {customElements.map((element, index) => (
+                            <DroppableCustomElement
+                              key={element.id}
+                              element={element}
+                              index={index}
+                              onRemoveMatch={removeCustomElementMatch}
+                              onDelete={deleteCustomElement}
+                            />
+                          ))}
+                          
+                          {/* Add Data Element button */}
+                          <button
+                            onClick={addCustomElement}
+                            className="flex items-center justify-center p-2 rounded-md bg-white dark:bg-navy-800 border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors duration-200"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                              Add Data Element
+                            </span>
+                          </button>
                         </div>
                         
-                        {(matchedElements.filter(match => match.element.required && !removedRequiredElements.has(match.element.id)).length === 0) && (
+                        {matchedElements.filter(match => !removedRequiredElements.has(match.element.id)).length === 0 && 
+                         customElements.length === 0 && (
                           <p className="text-sm text-gray-500 dark:text-gray-400 p-3 text-center">
-                            {matchStats.requiredTotal > 0 ? 'All required elements have been removed' : 'No required elements configured'}
+                            No data elements configured
                           </p>
                         )}
                       </div>
                     </div>
                     
-                    {/* Additional Data Elements - now in the right column, bottom */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          Additional Data Elements
-                        </h4>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto mb-2">
-                        <div className="grid grid-cols-1 gap-2">
-                          {matchedElements
-                            .filter(match => !match.element.required)
-                            .map((match, index) => (
-                              <DroppableElement
-                                key={match.element.id || `opt-${index}`}
-                                match={match}
-                                index={index}
-                                onRemoveMatch={removeMatch}
-                                isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
-                                onSelectForRedaction={toggleElementRedaction}
-                              />
-                            ))}
-                        </div>
-                        
-                        {matchedElements.filter(match => !match.element.required).length === 0 && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
-                            No additional elements configured
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* New section: Removed Required Data Elements */}
+                    {/* Removed Required Elements Section - keep this as is */}
                     {removedRequiredElements.size > 0 && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -1410,7 +1598,7 @@ const DocumentControl = ({
                             </span>
                           </h4>
                         </div>
-                        <div className="rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                        <div className="p-3 max-h-[250px] overflow-y-auto">
                           <div className="grid grid-cols-1 gap-2">
                             {matchedElements
                               .filter(match => match.element.required && removedRequiredElements.has(match.element.id))

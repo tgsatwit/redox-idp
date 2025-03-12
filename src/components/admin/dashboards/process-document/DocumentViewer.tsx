@@ -449,7 +449,7 @@ const DocumentViewer = ({
             }
           >
             <p className="text-md font-semi-bold text-navy-700 dark:text-white flex items-center">
-              <MdHideImage className="mr-2" /> Redacted View
+              <MdHideImage className="mr-2" /> Redacted Document
               {redactedItems.length > 0 && (
                 <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
                   {redactedItems.length}
