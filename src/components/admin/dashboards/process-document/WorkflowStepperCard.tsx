@@ -55,8 +55,8 @@ const WorkflowStepperCard = ({
   };
 
   return (
-    <Card extra="w-full overflow-hidden shadow-md h-full">
-      <div className="flex flex-col h-full">
+    <Card extra="w-full overflow-hidden shadow-md">
+      <div className="flex flex-col">
         {/* Header with progress - Using gradient background */}
         <div className="bg-gradient-to-r from-brand-400 to-brand-600 p-6 text-white">
           <h3 className="text-2xl font-bold mb-2">{title}</h3>
@@ -74,7 +74,7 @@ const WorkflowStepperCard = ({
         </div>
         
         {/* Steps list */}
-        <div className="flex flex-col bg-white dark:bg-navy-800">
+        <div className="flex flex-col bg-white dark:bg-navy-800 pb-4">
           {steps.map((step) => (
             <div key={step.id} className="flex flex-col border-b border-b-2 dark:border-b-navy-700">
               <div 
