@@ -611,9 +611,13 @@ const DocumentClassification = ({
             className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-navy-700"
           >
             {isCollapsed ? (
-              <MdKeyboardArrowDown size={24} className="text-gray-500 dark:text-white" />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             ) : (
-              <MdKeyboardArrowUp size={24} className="text-gray-500 dark:text-white" />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
             )}
           </button>
         </div>

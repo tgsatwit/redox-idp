@@ -26,6 +26,7 @@ interface DocumentViewerProps {
     sentiment?: string;
     sentimentScores?: { [key: string]: number };
     languageCode?: string;
+    documentSummary?: string;
   };
   redactedItems?: RedactedItem[];
   onApplyRedactions?: (redactedItems: RedactedItem[]) => void;
@@ -45,7 +46,7 @@ const DocumentViewer = ({
   const [preview, setPreview] = useState<string | null>(null);
   const [isImage, setIsImage] = useState(false);
   const [isPdf, setIsPdf] = useState(false);
-  const [activeTab, setActiveTab] = useState<'original' | 'extracted' | 'redacted'>('original');
+  const [activeTab, setActiveTab] = useState<'original' | 'extracted' | 'redacted' | 'summary'>('original');
   const [activeSubTab, setActiveSubTab] = useState<'text' | 'elements' | 'comprehend' | 'textract'>('text');
   const [copySuccess, setCopySuccess] = useState(false);
   const previewRef = useRef<{ url: string | null; fileName: string | null }>({ url: null, fileName: null });
@@ -118,6 +119,14 @@ const DocumentViewer = ({
       applyRedactionsToImage();
     }
   }, [activeTab, isImage, preview, redactedItems, redactedImage]);
+
+  // Update the useEffect to set 'summary' tab when a summary is available
+  useEffect(() => {
+    // If there's a new summary, switch to the summary tab
+    if (classificationResults?.documentSummary && currentStep === 3) {
+      setActiveTab('summary');
+    }
+  }, [classificationResults?.documentSummary, currentStep]);
 
   // Determine if the file format is supported
   const isFormatSupported = file && (isImage || isPdf);
@@ -403,13 +412,13 @@ const DocumentViewer = ({
   return (
     <div className="w-full h-full">
       {/* File info header */}
-      <div className="">
+      <div className="mb-4">
         {showTitle && <h2 className="text-2xl font-bold text-navy-700 dark:text-white">Document Viewer</h2>}
       </div>
       
       {/* Main tabs */}
       <div className="my-4">
-        <div className="flex w-full justify-start gap-8 overflow-hidden">
+        <div className="flex w-full justify-start gap-6 overflow-x-auto pb-1">
           <div
             onClick={() => setActiveTab('original')}
             className={
@@ -434,6 +443,25 @@ const DocumentViewer = ({
               Extracted Data
             </p>
           </div>
+          {/* Add new Summary tab */}
+          <div
+            onClick={() => {
+              if (classificationResults?.documentSummary) {
+                setActiveTab('summary')
+              }
+            }}
+            className={
+              activeTab === 'summary'
+                ? 'flex items-center gap-3 border-b-[4px] border-brand-500 pb-3 hover:cursor-pointer dark:border-brand-400'
+                : `flex items-center gap-3 border-b-[4px] border-white pb-3 hover:cursor-pointer dark:!border-navy-800 ${
+                    !classificationResults?.documentSummary ? 'opacity-50 cursor-not-allowed' : ''
+                  }`
+            }
+          >
+            <p className="text-md font-semi-bold text-navy-700 dark:text-white flex items-center">
+              Document Summary
+            </p>
+          </div>
           <div
             onClick={() => {
               if (redactedItems.length > 0) {
@@ -449,7 +477,7 @@ const DocumentViewer = ({
             }
           >
             <p className="text-md font-semi-bold text-navy-700 dark:text-white flex items-center">
-              <MdHideImage className="mr-2" /> Redacted Document
+              Redacted Document
               {redactedItems.length > 0 && (
                 <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2 py-0.5 rounded-full dark:bg-red-900 dark:text-red-300">
                   {redactedItems.length}
@@ -731,6 +759,56 @@ const DocumentViewer = ({
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Add Summary tab content */}
+          {activeTab === 'summary' && (
+            <div className="h-full">
+              <div className="flex-1 flex flex-col">
+                  {classificationResults?.documentSummary ? (
+                    <div className="m-4 pt-4 h-full overflow-y-auto">
+                      <div className="relative">
+                        <button
+                          onClick={() => {
+                            if (classificationResults.documentSummary) {
+                              navigator.clipboard.writeText(classificationResults.documentSummary);
+                              setCopySuccess(true);
+                              setTimeout(() => setCopySuccess(false), 2000);
+                            }
+                          }}
+                          className="absolute right-2 top-2 p-2 rounded-md bg-gray-100 dark:bg-navy-700 hover:bg-gray-200 dark:hover:bg-navy-600 transition-colors duration-200 z-10"
+                          title="Copy text"
+                        >
+                          {copySuccess ? (
+                            <span className="h-5 w-5 text-green-500">
+                              <BsCheckCircle />
+                            </span>
+                          ) : (
+                            <span className="h-5 w-5 text-gray-500 dark:text-gray-400">
+                              <MdContentCopy />
+                            </span>
+                          )}
+                        </button>
+                        <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-5">
+                          <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                            {classificationResults.documentSummary}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <MdDescription className="w-12 h-12 text-gray-400 mb-2" />
+                      <p className="text-gray-500 dark:text-gray-400 font-medium mb-2">
+                        No document summary available
+                      </p>
+                      <p className="text-gray-400 dark:text-gray-500 text-sm">
+                        Process the document with the "Create Summary" option enabled to generate a summary
+                      </p>
+                    </div>
+                  )}
+              </div>
             </div>
           )}
         </div>

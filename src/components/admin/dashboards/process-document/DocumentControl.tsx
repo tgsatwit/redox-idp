@@ -435,7 +435,7 @@ const DocumentControl = ({
       
       try {
         // API call to get document elements from DynamoDB
-        const response = await fetch(`/api/document-elements?documentType=${documentType}${documentSubType ? `&subType=${documentSubType}` : ''}`);
+        const response = await fetch(`/api/docs-3-process/document-elements?documentType=${documentType}${documentSubType ? `&subType=${documentSubType}` : ''}`);
         setFetchAttempted(true);
         
         if (!response.ok) {
@@ -1374,8 +1374,20 @@ const DocumentControl = ({
     return hasManualRedactions || hasRequiredRedactions;
   };
 
+  // Expose autoMatchFields to the window for external access
+  useEffect(() => {
+    // Only in browser environment
+    if (typeof window !== 'undefined') {
+      const controlElement = document.querySelector('[data-testid="document-control"]');
+      if (controlElement) {
+        (controlElement as any).autoMatchFields = autoMatchFields;
+        (controlElement as any).handleApplyRedactions = handleApplyRedactions;
+      }
+    }
+  }, [extractedFields, matchedElements, redactedElements, redactedFields]); // Dependencies that these functions need
+
   return (
-    <Card extra="w-full p-6">
+    <Card extra="w-full p-6" data-testid="document-control">
       <div className="flex items-center justify-between">
         <h3 className="text-2xl font-bold text-navy-700 dark:text-white">Document Control</h3>
           {/* Inserted clickable pill label for required elements resolved status */}

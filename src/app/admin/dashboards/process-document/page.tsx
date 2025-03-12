@@ -13,6 +13,7 @@ import {
   MdAutorenew, 
   MdCheckCircle
 } from 'react-icons/md';
+import { BsFillCheckCircleFill } from 'react-icons/bs';
 
 // Define interface for analysis results
 interface AnalysisResults {
@@ -48,6 +49,7 @@ interface AnalysisResults {
   textractAnalyzeId?: string;
   extractedFields?: any[];
   rawTextractData?: any;
+  documentSummary?: string;
 }
 
 interface DocumentType {
@@ -155,6 +157,25 @@ const ProcessDocument = () => {
     value?: string;
     boundingBox?: any;
   }>>([]);
+  
+  // Add state variables for processing status
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [processingStatus, setProcessingStatus] = useState<{
+    autoMatchCompleted: boolean;
+    redactionCompleted: boolean;
+    summaryCompleted: boolean;
+    summaryText?: string;
+    processingComplete: boolean;
+    error?: string;
+  }>({
+    autoMatchCompleted: false,
+    redactionCompleted: false,
+    summaryCompleted: false,
+    processingComplete: false
+  });
+  
+  // Add state for confirmation dialog
+  const [showReprocessConfirm, setShowReprocessConfirm] = useState<boolean>(false);
   
   // Helper functions for document handling
   const isFormatSupported = (file: File) => {
@@ -339,7 +360,7 @@ const ProcessDocument = () => {
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
-                  Automtically Identify Data Elements
+                  Automatically Identify Data Elements
                 </p>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 
@@ -521,21 +542,97 @@ const ProcessDocument = () => {
               )}
             </div>
 
-            <div className="flex gap-4 mt-4">
+            <div className="grid grid-cols-3 gap-4 mt-8">
+              {/* Previous button - always shown */}
               <button
                 onClick={handlePreviousStep}
-                className="mt-4 flex-1 flex items-center justify-center py-2 px-6 border border-gray-300 text-gray-700 dark:text-white dark:border-navy-600 text-sm font-medium rounded-md hover:bg-gray-50 dark:hover:bg-navy-800 focus:outline-none"
+                className="flex items-center justify-center py-2 px-6 border border-gray-300 text-gray-700 dark:text-white dark:border-navy-600 text-sm font-medium rounded-md hover:bg-gray-50 dark:hover:bg-navy-800 focus:outline-none"
               >
                 <span className="mr-2">←</span> Previous
               </button>
               
-              <button
-                onClick={handleNextStep}
-                className="mt-4 flex-1 flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none"
-              >
-                Next <span className="ml-2">→</span>
-              </button>
+              {processingStatus.processingComplete ? (
+                <>
+                  {/* Re-Process button */}
+                  <button
+                    onClick={handleReprocessClick}
+                    className="flex items-center justify-center py-2 px-6 border border-indigo-500 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400 text-sm font-medium rounded-md hover:bg-indigo-50 dark:hover:bg-navy-800 focus:outline-none"
+                  >
+                    <MdAutorenew className="mr-2" /> Re-Process
+                  </button>
+                  {/* Next button */}
+                  <button
+                    onClick={handleNextStep}
+                    className="flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none"
+                  >
+                    Next <span className="ml-2">→</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={processDocument}
+                  disabled={isProcessing}
+                  className="flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed col-span-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-white inline-block"></span>
+                      Processing...
+                    </>
+                  ) : (
+                    'Process Document'
+                  )}
+                </button>
+              )}
             </div>
+            
+            {/* Show processing status */}
+            {isProcessing && (
+              <div className="mt-4 p-4 bg-gray-50 dark:bg-navy-700 rounded-md border border-gray-200 dark:border-navy-600">
+                <h4 className="font-medium text-gray-800 dark:text-white mb-2">Processing Document</h4>
+                <ul className="space-y-2">
+                  {identifyRequiredData && (
+                    <li className="flex items-center">
+                      {processingStatus.autoMatchCompleted ? (
+                        <BsFillCheckCircleFill className="text-green-500 mr-2" />
+                      ) : (
+                        <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-indigo-600 dark:border-indigo-400 inline-block"></span>
+                      )}
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Auto-matching data elements</span>
+                    </li>
+                  )}
+                  
+                  {redactElements && (
+                    <li className="flex items-center">
+                      {processingStatus.redactionCompleted ? (
+                        <BsFillCheckCircleFill className="text-green-500 mr-2" />
+                      ) : (
+                        <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-indigo-600 dark:border-indigo-400 inline-block"></span>
+                      )}
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Applying redactions</span>
+                    </li>
+                  )}
+                  
+                  {createSummary && (
+                    <li className="flex items-center">
+                      {processingStatus.summaryCompleted ? (
+                        <BsFillCheckCircleFill className="text-green-500 mr-2" />
+                      ) : (
+                        <span className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-t-2 border-indigo-600 dark:border-indigo-400 inline-block"></span>
+                      )}
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Creating document summary</span>
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+            
+            {/* Show error if any */}
+            {processingStatus.error && (
+              <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800/30">
+                <p className="text-sm text-red-600 dark:text-red-400">{processingStatus.error}</p>
+              </div>
+            )}
           </div>
         );
       }
@@ -558,7 +655,12 @@ const ProcessDocument = () => {
     saveOriginalDocument,
     saveRedactedDocument,
     originalRetentionPolicy,
-    redactedRetentionPolicy
+    redactedRetentionPolicy,
+    // Add dependencies for processing status
+    isProcessing,
+    processingStatus,
+    // Add dependency for reprocess confirmation
+    showReprocessConfirm
   ]);
 
   // Keep this effect for auto-classify synchronization
@@ -1049,6 +1151,235 @@ const ProcessDocument = () => {
     }
   };
 
+  // Reset processing status when entering Step 3
+  useEffect(() => {
+    if (currentStep === 3) {
+      // Reset processing status when entering step 3
+      setProcessingStatus({
+        autoMatchCompleted: false,
+        redactionCompleted: false,
+        summaryCompleted: false,
+        processingComplete: false,
+        summaryText: undefined,
+        error: undefined
+      });
+    }
+  }, [currentStep]);
+
+  // Function to process the document based on selected options
+  const processDocument = async () => {
+    setIsProcessing(true);
+    setProcessingStatus({
+      autoMatchCompleted: false,
+      redactionCompleted: false,
+      summaryCompleted: false,
+      processingComplete: false,
+      summaryText: undefined,
+      error: undefined
+    });
+    
+    try {
+      // Get the document control element
+      const documentControlElement = document.querySelector('[data-testid="document-control"]');
+      
+      // Step 1: Auto-match fields if selected
+      if (identifyRequiredData) {
+        // Call the autoMatch function if it exists on the component
+        if (documentControlElement && typeof (documentControlElement as any).autoMatchFields === 'function') {
+          try {
+            await (documentControlElement as any).autoMatchFields();
+            // Mark auto-match as completed
+            setProcessingStatus(prev => ({ ...prev, autoMatchCompleted: true }));
+          } catch (error) {
+            console.error('Error auto-matching fields:', error);
+            setProcessingStatus(prev => ({ 
+              ...prev, 
+              autoMatchCompleted: false,
+              error: error instanceof Error ? error.message : 'Error during auto-matching'
+            }));
+          }
+        } else {
+          console.warn('Auto-match function not found on DocumentControl');
+          setProcessingStatus(prev => ({ 
+            ...prev, 
+            autoMatchCompleted: true, // Mark as completed anyway to allow proceeding
+            error: 'Auto-match function not available'
+          }));
+        }
+      } else {
+        // Skip auto-match
+        setProcessingStatus(prev => ({ ...prev, autoMatchCompleted: true }));
+      }
+      
+      // Step 2: Apply redactions if selected
+      if (redactElements) {
+        if (documentControlElement && typeof (documentControlElement as any).handleApplyRedactions === 'function') {
+          try {
+            await (documentControlElement as any).handleApplyRedactions();
+            // Mark redaction as completed
+            setProcessingStatus(prev => ({ ...prev, redactionCompleted: true }));
+          } catch (error) {
+            console.error('Error applying redactions:', error);
+            setProcessingStatus(prev => ({ 
+              ...prev, 
+              redactionCompleted: false,
+              error: error instanceof Error ? error.message : 'Error during redaction'
+            }));
+          }
+        } else {
+          console.warn('Apply redactions function not found on DocumentControl');
+          setProcessingStatus(prev => ({ 
+            ...prev, 
+            redactionCompleted: true, // Mark as completed anyway to allow proceeding
+            error: 'Redaction function not available'
+          }));
+        }
+      } else {
+        // Skip redaction
+        setProcessingStatus(prev => ({ ...prev, redactionCompleted: true }));
+      }
+      
+      // Step 3: Create summary if selected
+      if (createSummary && analysisResults?.textExtraction?.text) {
+        try {
+          const response = await fetch('/api/docs-3-process/summarise-doc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: analysisResults.textExtraction.text,
+              documentType: analysisResults.classification?.type,
+              documentSubType: analysisResults.classification?.subType,
+              extractedFields: analysisResults.extractedFields
+            })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Summary generation failed');
+          }
+          
+          const summaryResult = await response.json();
+          
+          // Store the summary in the processing status and analysis results
+          setProcessingStatus(prev => ({ 
+            ...prev, 
+            summaryCompleted: true,
+            summaryText: summaryResult.summary
+          }));
+          
+          // Also store in analysisResults for the DocumentViewer
+          setAnalysisResults(prevResults => ({
+            ...prevResults,
+            documentSummary: summaryResult.summary
+          }));
+        } catch (error) {
+          console.error('Error creating summary:', error);
+          setProcessingStatus(prev => ({ 
+            ...prev, 
+            summaryCompleted: false,
+            error: error instanceof Error ? error.message : 'Unknown error during summary creation'
+          }));
+        }
+      } else {
+        // Skip summary
+        setProcessingStatus(prev => ({ ...prev, summaryCompleted: true }));
+      }
+      
+      // Step 4: Validate retention policies if saving documents
+      let policiesValid = true;
+      let policyError = '';
+      
+      if (saveOriginalDocument && !originalRetentionPolicy) {
+        policiesValid = false;
+        policyError = 'Please select a retention policy for the original document';
+      }
+      
+      if (saveRedactedDocument && !redactedRetentionPolicy) {
+        policiesValid = false;
+        policyError = !policyError 
+          ? 'Please select a retention policy for the redacted document'
+          : 'Please select retention policies for both documents';
+      }
+      
+      if (!policiesValid) {
+        setProcessingStatus(prev => ({ 
+          ...prev, 
+          processingComplete: false,
+          error: policyError
+        }));
+      } else {
+        // All processing steps completed successfully
+        setProcessingStatus(prev => ({ 
+          ...prev, 
+          processingComplete: true,
+          error: undefined
+        }));
+      }
+    } catch (error) {
+      console.error('Error during document processing:', error);
+      setProcessingStatus(prev => ({ 
+        ...prev, 
+        processingComplete: false,
+        error: error instanceof Error ? error.message : 'Unknown error during document processing'
+      }));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  // Validate policies when they change
+  useEffect(() => {
+    if (currentStep === 3 && processingStatus.processingComplete) {
+      let policiesValid = true;
+      
+      if (saveOriginalDocument && !originalRetentionPolicy) {
+        policiesValid = false;
+      }
+      
+      if (saveRedactedDocument && !redactedRetentionPolicy) {
+        policiesValid = false;
+      }
+      
+      if (!policiesValid) {
+        setProcessingStatus(prev => ({ ...prev, processingComplete: false }));
+      } else {
+        setProcessingStatus(prev => ({ ...prev, processingComplete: true }));
+      }
+    }
+  }, [currentStep, saveOriginalDocument, saveRedactedDocument, originalRetentionPolicy, redactedRetentionPolicy, processingStatus.processingComplete]);
+
+  // Handle re-process confirmation
+  const handleReprocessConfirm = () => {
+    setShowReprocessConfirm(false);
+    
+    // Reset redacted items to ensure the document viewer updates
+    setRedactedItems([]);
+    
+    // Reset processing status
+    setProcessingStatus({
+      autoMatchCompleted: false,
+      redactionCompleted: false,
+      summaryCompleted: false,
+      processingComplete: false,
+      summaryText: undefined,
+      error: undefined
+    });
+    
+    // Also clear the document summary in analysis results
+    setAnalysisResults(prevResults => ({
+      ...prevResults,
+      documentSummary: undefined
+    }));
+    
+    // Start processing
+    processDocument();
+  };
+
+  // Handle re-process button click
+  const handleReprocessClick = () => {
+    setShowReprocessConfirm(true);
+  };
+
   return (
     <div className="mt-6 flex w-full flex-col items-center bg-white dark:bg-navy-900 py-4">
       {/* Main layout with 2 columns */}
@@ -1140,6 +1471,40 @@ const ProcessDocument = () => {
           </div>
         </div>
       </div>
+
+      {/* Reprocess Confirmation Dialog */}
+      {showReprocessConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-navy-800 rounded-lg p-6 max-w-md mx-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Confirm Re-Processing</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Re-processing the document will reset any existing processed data including:
+            </p>
+            <ul className="list-disc pl-5 mb-4 text-sm text-gray-600 dark:text-gray-400">
+              <li>Matched data elements</li>
+              <li>Applied redactions</li>
+              <li>Generated document summary</li>
+            </ul>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Your current settings and options will be retained.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowReprocessConfirm(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-navy-600 text-gray-700 dark:text-white rounded-md hover:bg-gray-50 dark:hover:bg-navy-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReprocessConfirm}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+              >
+                Re-Process
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
