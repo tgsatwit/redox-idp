@@ -59,7 +59,7 @@ const WorkflowStepperCard = ({
       <div className="flex flex-col h-full">
         {/* Header with progress - Using gradient background */}
         <div className="bg-gradient-to-r from-brand-400 to-brand-600 p-6 text-white">
-          <h3 className="text-xl font-medium mb-2">{title}</h3>
+          <h3 className="text-2xl font-bold mb-2">{title}</h3>
           <p className="text-sm text-white font-medium">{completedCount}/{totalSteps} COMPLETED</p>
           
           {/* Progress bar */}
@@ -118,7 +118,6 @@ const WorkflowStepperCard = ({
                             : ''
                       }`}>
                         {step.name}
-                        {step.completed && " ✓"}
                       </span>
                       {step.id === currentStep && !step.completed && (
                         <span className="text-xs text-amber-500 dark:text-amber-400 mt-0.5">In progress</span>

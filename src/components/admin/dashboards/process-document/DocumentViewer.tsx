@@ -575,7 +575,7 @@ const DocumentViewer = ({
                   <div className="relative">
                     <button
                       onClick={handleCopyText}
-                      className="absolute right-2 top-2 p-2 rounded-md bg-gray-100 dark:bg-navy-700 hover:bg-gray-200 dark:hover:bg-navy-600 transition-colors duration-200 z-10"
+                      className="absolute right-2 top-2 p-2 mr-8 rounded-md bg-gray-100 dark:bg-navy-700 hover:bg-gray-200 dark:hover:bg-navy-600 transition-colors duration-200 z-10"
                       title="Copy text"
                     >
                       {copySuccess ? (

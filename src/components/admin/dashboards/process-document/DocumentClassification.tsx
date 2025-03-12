@@ -21,6 +21,21 @@ interface DocumentSubType {
   documentTypeId: string;
 }
 
+// Helper function to check if a classification is valid
+const isValidClassification = (classification?: { type: string; subType?: string }) => {
+  if (!classification) return false;
+  
+  // Check if type is valid (not empty, undefined, or "Unknown")
+  const isTypeValid = !!classification.type && 
+    classification.type.toLowerCase() !== "unknown" && 
+    classification.type.toLowerCase() !== "undefined" &&
+    classification.type.trim() !== "";
+  
+  // For subType, we're primarily checking it's not empty if the type is valid
+  // Some document types might not have subTypes, so we're less strict here
+  return isTypeValid;
+};
+
 interface DocumentClassificationProps {
   file?: File;
   onCancel?: () => void;
@@ -30,9 +45,13 @@ interface DocumentClassificationProps {
   autoClassify?: boolean;
   useTextExtraction?: boolean;
   scanForTFN?: boolean;
+  conductFraudCheck?: boolean;
   setAutoClassify?: (value: boolean) => void;
   setUseTextExtraction?: (value: boolean) => void;
   setScanForTFN?: (value: boolean) => void;
+  setConductFraudCheck?: (value: boolean) => void;
+  isCollapsed?: boolean;
+  setIsCollapsed?: (value: boolean) => void;
 }
 
 // Define a helper type for processed document types
@@ -52,23 +71,32 @@ const DocumentClassification = ({
   autoClassify: externalAutoClassify,
   useTextExtraction: externalUseTextExtraction,
   scanForTFN: externalScanForTFN,
+  conductFraudCheck: externalConductFraudCheck,
   setAutoClassify: externalSetAutoClassify,
   setUseTextExtraction: externalSetUseTextExtraction,
-  setScanForTFN: externalSetScanForTFN
+  setScanForTFN: externalSetScanForTFN,
+  setConductFraudCheck: externalSetConductFraudCheck,
+  isCollapsed: externalIsCollapsed,
+  setIsCollapsed: externalSetIsCollapsed
 }: DocumentClassificationProps) => {
   const [internalAutoClassify, setInternalAutoClassify] = useState(true);
   const [internalUseTextExtraction, setInternalUseTextExtraction] = useState(false);
   const [internalScanForTFN, setInternalScanForTFN] = useState(false);
+  const [internalConductFraudCheck, setInternalConductFraudCheck] = useState(false);
   const [manualClassifyOverride, setManualClassifyOverride] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [internalIsCollapsed, setInternalIsCollapsed] = useState(false);
   
   const autoClassifyValue = externalAutoClassify !== undefined ? externalAutoClassify : internalAutoClassify;
   const useTextExtractionValue = externalUseTextExtraction !== undefined ? externalUseTextExtraction : internalUseTextExtraction;
   const scanForTFNValue = externalScanForTFN !== undefined ? externalScanForTFN : internalScanForTFN;
+  const conductFraudCheckValue = externalConductFraudCheck !== undefined ? externalConductFraudCheck : internalConductFraudCheck;
+  const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalIsCollapsed;
   
   const setAutoClassifyValue = externalSetAutoClassify || setInternalAutoClassify;
   const setUseTextExtractionValue = externalSetUseTextExtraction || setInternalUseTextExtraction;
   const setScanForTFNValue = externalSetScanForTFN || setInternalScanForTFN;
+  const setConductFraudCheckValue = externalSetConductFraudCheck || setInternalConductFraudCheck;
+  const setIsCollapsed = externalSetIsCollapsed || setInternalIsCollapsed;
   
   const [isClassified, setIsClassified] = useState(false);
   const [documentType, setDocumentType] = useState<string>('');
@@ -236,6 +264,12 @@ const DocumentClassification = ({
   // Update the classification state and UI
   const updateClassification = (classification: { type: string; subType: string; confidence: number; source: string }) => {
     if (!classification?.type) return;
+    
+    // Validate the classification before proceeding
+    if (!isValidClassification(classification)) {
+      console.warn('Invalid classification received:', classification);
+      return;
+    }
 
     // Update the analysis results
     const updatedResults = {
@@ -325,9 +359,20 @@ const DocumentClassification = ({
         if (classifyResponse.ok) {
           const classificationResult = await classifyResponse.json();
           
+          // Validate the AWS classification result
+          const awsType = classificationResult.dominant || '';
+          const isValidAwsType = awsType.toLowerCase() !== 'unknown' && 
+                                 awsType.toLowerCase() !== 'undefined' && 
+                                 awsType.trim() !== '';
+          
+          if (!isValidAwsType) {
+            console.warn('AWS Comprehend returned invalid document type:', awsType);
+            return;
+          }
+          
           // Find the matching document type
           const matchedType = documentTypes.find(type => 
-            type.name.toLowerCase() === classificationResult.dominant.toLowerCase()
+            type.name.toLowerCase() === awsType.toLowerCase()
           );
           
           if (matchedType) {
@@ -344,6 +389,8 @@ const DocumentClassification = ({
             };
             
             updateClassification(classification);
+          } else {
+            console.warn('AWS Comprehend returned a document type that does not match any known type:', awsType);
           }
         }
       }
@@ -389,14 +436,25 @@ const DocumentClassification = ({
             subType.name.toLowerCase() === (llmResult.subType || '').toLowerCase()
           );
 
-          const classification = {
-            type: matchedType?.name || llmResult.documentType || 'Unknown',
-            subType: matchedSubType?.name || llmResult.subType || '',
-            confidence: llmResult.confidence || 0.9,
-            source: 'OpenAI'
-          };
+          // Get the type name and validate it
+          const typeName = matchedType?.name || llmResult.documentType || '';
+          const isValidType = typeName.toLowerCase() !== 'unknown' && 
+                              typeName.toLowerCase() !== 'undefined' && 
+                              typeName.trim() !== '';
+          
+          if (isValidType) {
+            const classification = {
+              type: typeName,
+              subType: matchedSubType?.name || llmResult.subType || '',
+              confidence: llmResult.confidence || 0.9,
+              source: 'OpenAI'
+            };
 
-          updateClassification(classification);
+            updateClassification(classification);
+          } else {
+            console.warn('LLM returned invalid document type:', typeName);
+            setIsAnalysing(false);
+          }
         } else {
           console.error('LLM classification failed:', await llmResponse.text());
         }
@@ -444,6 +502,10 @@ const DocumentClassification = ({
   
   const toggleScanForTFN = () => {
     setScanForTFNValue(!scanForTFNValue);
+  };
+  
+  const toggleConductFraudCheck = () => {
+    setConductFraudCheckValue(!conductFraudCheckValue);
   };
 
   // Toggle manual classification override
@@ -510,25 +572,25 @@ const DocumentClassification = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Classification</h3>
+        <h3 className="text-2xl font-bold text-navy-700 dark:text-white">Document Classification</h3>
         <div className="flex items-center gap-2">
           <div>
             {analysisResults.classification ? (
-              analysisResults.classification.type === 'undefined' ? (
-                <ClickablePillLabel
-                  label="undefined"
-                  icon={<MdError />}
-                  iconColor="text-red-500"
-                  bg="bg-[#FDE0D0] dark:!bg-navy-700"
-                  mb="mb-0"
-                  onClick={() => {}}
-                />
-              ) : (
+              isValidClassification(analysisResults.classification) ? (
                 <ClickablePillLabel
                   label={analysisResults.classification.type}
                   icon={<BsFillCheckCircleFill />}
                   iconColor="text-green-500"
                   bg="bg-[#C9FBD5] dark:!bg-navy-700"
+                  mb="mb-0"
+                  onClick={() => {}}
+                />
+              ) : (
+                <ClickablePillLabel
+                  label="Invalid Classification"
+                  icon={<MdError />}
+                  iconColor="text-red-500"
+                  bg="bg-[#FDE0D0] dark:!bg-navy-700"
                   mb="mb-0"
                   onClick={() => {}}
                 />
@@ -646,8 +708,15 @@ const DocumentClassification = ({
                     <div className="flex flex-col">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Type:</p>
                       <div className="inline-flex items-center">
-                        <p className="text-sm font-medium text-gray-800 dark:text-white">
+                        <p className={`text-sm font-medium ${
+                          isValidClassification(analysisResults.classification) 
+                            ? 'text-gray-800 dark:text-white' 
+                            : 'text-red-500 dark:text-red-400'
+                        }`}>
                           {analysisResults.classification.type || "undefined"}
+                          {!isValidClassification(analysisResults.classification) && 
+                            <span className="ml-2 text-xs text-red-500 dark:text-red-400">(Invalid)</span>
+                          }
                         </p>
                       </div>
                     </div>
@@ -674,6 +743,17 @@ const DocumentClassification = ({
                         {analysisResults.classification.source}
                       </p>
                     </div>
+                  </div>
+                )}
+
+                {/* Warning message for invalid classification */}
+                {analysisResults.classification && !isValidClassification(analysisResults.classification) && (
+                  <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md text-red-600 dark:text-red-400 text-sm">
+                    <p className="font-medium">Invalid Classification</p>
+                    <p className="mt-1">
+                      The current classification is not valid. "Unknown" or empty classifications are not accepted.
+                      Please use the manual classification option below or re-analyse the document.
+                    </p>
                   </div>
                 )}
 

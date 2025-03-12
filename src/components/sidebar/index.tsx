@@ -82,7 +82,7 @@ function SidebarHorizon(props: { routes: IRoute[]; [x: string]: any }) {
             </div>
             <div className="mb-[30px] mt-[28px]">
               {/* Sidebar profile info */}
-              <div className="mt-5 flex items-center justify-center gap-3">
+              <div className="mt-5 flex items-center justify-center gap-3 pr-8">
                 <div 
                   className="flex h-12 w-12 items-center justify-center rounded-full text-white font-bold text-lg"
                   style={{ backgroundColor: theme?.['--color-500'] || '#422AFB' }}

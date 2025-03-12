@@ -63,12 +63,29 @@ interface DocumentSubType {
   documentTypeId: string;
 }
 
+// Helper function to check if a classification is valid
+const isValidClassification = (classification?: { type: string; subType: string }) => {
+  if (!classification) return false;
+  
+  // Check if type is valid (not empty, undefined, or "Unknown")
+  const isTypeValid = !!classification.type && 
+    classification.type.toLowerCase() !== "unknown" && 
+    classification.type.toLowerCase() !== "undefined";
+  
+  // For subType, we're primarily checking it's not empty if the type is valid
+  // Some document types might not have subTypes, so we're less strict here
+  return isTypeValid;
+};
+
 const ProcessDocument = () => {
   const [selectedFile, setSelectedFile] = useState<File | undefined>(undefined);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isAnalysing, setIsAnalysing] = useState<boolean>(false);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResults>({});
   const [activeDataTab, setActiveDataTab] = useState<'extractedText' | 'awsResponse'>('extractedText');
+  
+  // Add state for DocumentClassification collapse status
+  const [isClassificationCardCollapsed, setIsClassificationCardCollapsed] = useState<boolean>(false);
   
   // Add state variables for Process Document options
   const [identifyRequiredData, setIdentifyRequiredData] = useState<boolean>(true);
@@ -128,6 +145,7 @@ const ProcessDocument = () => {
   const [autoClassify, setAutoClassify] = useState(true);
   const [useTextExtraction, setUseTextExtraction] = useState(false);
   const [scanForTFN, setScanForTFN] = useState(false);
+  const [conductFraudCheck, setConductFraudCheck] = useState(false);
   const [isClassificationCardExpanded, setIsClassificationCardExpanded] = useState(true);
   
   const [redactedItems, setRedactedItems] = useState<Array<{
@@ -153,13 +171,13 @@ const ProcessDocument = () => {
     setWorkflowSteps(prevSteps => prevSteps.map(step => {
       const baseStep = {
         ...step,
-        completed: step.id < currentStep || (step.id === 2 && !!analysisResults.classification),
+        completed: step.id < currentStep || (step.id === 2 && isValidClassification(analysisResults.classification)),
         locked: step.id === 1 
           ? false 
           : step.id === 2 
             ? !selectedFile 
             : step.id === 3 
-              ? !analysisResults.classification 
+              ? !isValidClassification(analysisResults.classification) 
               : currentStep < 4,
         selected: step.id === currentStep
       };
@@ -220,11 +238,11 @@ const ProcessDocument = () => {
                 </label>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Extract text and use LLM data analysis
+                Classify with LLM if AWS classification unsuccessful
               </p>
             </div>
             
-            <div>
+            <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
                   Scan for TFN
@@ -249,6 +267,31 @@ const ProcessDocument = () => {
               </p>
             </div>
 
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  Conduct Fraud Check
+                </p>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={conductFraudCheck}
+                    onChange={() => handleToggle(conductFraudCheck, setConductFraudCheck)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full peer peer-focus:ring-2 peer-focus:ring-offset-2 ${
+                    conductFraudCheck 
+                      ? 'bg-indigo-600 peer-focus:ring-indigo-400' 
+                      : 'bg-gray-300 dark:bg-gray-600 peer-focus:ring-gray-300 dark:peer-focus:ring-gray-700'
+                    } peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+                    after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                </label>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Perform fraud analysis and verification
+              </p>
+            </div>
+
             <div className="flex gap-4 mt-4">
               <button
                 onClick={runSelectedAnalysis}
@@ -269,7 +312,7 @@ const ProcessDocument = () => {
                 )}
               </button>
               
-              {analysisResults.classification && (
+              {isValidClassification(analysisResults.classification) && (
                 <button
                   onClick={handleNextStep}
                   className="mt-4 flex-1 flex items-center justify-center py-2 px-6 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none"
@@ -394,7 +437,6 @@ const ProcessDocument = () => {
               
               {saveOriginalDocument && (
                 <div className="mt-2 px-4 border-l-2 border-indigo-200">
-                  <p className="font-medium text-gray-800 dark:text-white text-sm mb-1">Original Document Retention Policy:</p>
                   <select 
                     value={originalRetentionPolicy} 
                     onChange={(e) => setOriginalRetentionPolicy(e.target.value)}
@@ -450,7 +492,6 @@ const ProcessDocument = () => {
               
               {saveRedactedDocument && (
                 <div className="mt-2 px-4 border-l-2 border-indigo-200">
-                  <p className="font-medium text-gray-800 dark:text-white text-sm mb-1">Redacted Document Retention Policy:</p>
                   <select 
                     value={redactedRetentionPolicy} 
                     onChange={(e) => setRedactedRetentionPolicy(e.target.value)}
@@ -509,6 +550,7 @@ const ProcessDocument = () => {
     autoClassify,
     useTextExtraction,
     scanForTFN,
+    conductFraudCheck,
     // Add dependencies for the Process Document options
     identifyRequiredData,
     redactElements,
@@ -525,6 +567,16 @@ const ProcessDocument = () => {
       setAutoClassify(true);
     }
   }, [analysisResults.classification]);
+
+  // Add effect to auto-collapse the classification card when moving past step 2
+  useEffect(() => {
+    // Automatically collapse the classification card when moving past step 2
+    if (currentStep > 2) {
+      setIsClassificationCardCollapsed(true);
+    } else {
+      setIsClassificationCardCollapsed(false);
+    }
+  }, [currentStep]);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -577,18 +629,21 @@ const ProcessDocument = () => {
     console.log('After setAnalysisResults:', results);
     setIsAnalysing(false);
     
-    // Update the workflow steps to mark the current step as completed
+    // Check if the classification is valid
+    const hasValidClassification = isValidClassification(results.classification);
+    
+    // Update the workflow steps to mark the current step as completed only if valid classification
     setWorkflowSteps(prevSteps => {
       return prevSteps.map(step => {
         if (step.id === 2) { // Current step (Classify & Analyse)
           return {
             ...step,
-            completed: true
+            completed: hasValidClassification
           };
         } else if (step.id === 3) { // Next step (Process Document)
           return {
             ...step,
-            locked: false // Unlock the next step
+            locked: !hasValidClassification // Only unlock if classification is valid
           };
         }
         return step;
@@ -596,10 +651,12 @@ const ProcessDocument = () => {
     });
     
     // Allow the user to review the classification results before advancing automatically
-    // Move to the next step (Process) after a longer delay
-    setTimeout(() => {
-      handleNextStep();
-    }, 3000); // Increased delay to 3 seconds to give users time to see results
+    // Only move to the next step if we have a valid classification
+    if (hasValidClassification) {
+      setTimeout(() => {
+        handleNextStep();
+      }, 3000); // Increased delay to 3 seconds to give users time to see results
+    }
   };
   
   const handleExtractText = async () => {
@@ -732,20 +789,31 @@ const ProcessDocument = () => {
         
         const classificationResult = await classifyResponse.json();
         console.log('AWS Classification result:', classificationResult);
+        
+        // Validate AWS classification
+        const awsType = classificationResult.dominant || "";
+        const isValidAwsType = awsType.toLowerCase() !== "unknown" && 
+                               awsType.toLowerCase() !== "undefined" &&
+                               awsType.trim() !== "";
+        
         results.awsClassification = {
-          type: classificationResult.dominant,
+          type: awsType,
           subType: undefined,
           confidence: classificationResult.dominantScore || 1.0
         };
         
-        // Set the main classification result using AWS result
-        results.classification = {
-          type: classificationResult.dominant,
-          subType: "",
-          confidence: classificationResult.dominantScore || 1.0,
-          source: 'AWS Comprehend'
-        };
-        console.log('Set classification from AWS:', results.classification);
+        // Set the main classification result using AWS result if valid
+        if (isValidAwsType) {
+          results.classification = {
+            type: awsType,
+            subType: "",
+            confidence: classificationResult.dominantScore || 1.0,
+            source: 'AWS Comprehend'
+          };
+          console.log('Set classification from AWS:', results.classification);
+        } else {
+          console.warn('AWS classification returned invalid type:', awsType);
+        }
       }
       
       // Step 3: If text extraction option is enabled, try to classify with LLM
@@ -780,21 +848,32 @@ const ProcessDocument = () => {
         if (llmResponse.ok) {
           const llmResult = await llmResponse.json();
           console.log('LLM Classification result:', llmResult);
+          
+          // Validate LLM classification
+          const llmType = llmResult.documentType || llmResult.type || "";
+          const isValidLlmType = llmType.toLowerCase() !== "unknown" && 
+                                 llmType.toLowerCase() !== "undefined" &&
+                                 llmType.trim() !== "";
+          
           results.gptClassification = {
-            type: llmResult.documentType || llmResult.type || "",
+            type: llmType,
             subType: llmResult.subType || "",
             confidence: llmResult.confidence || 0.9,
             reasoning: llmResult.reasoning || ""
           };
           
-          // Override the main classification result with LLM result if available
-          results.classification = {
-            type: llmResult.documentType || llmResult.type || "",
-            subType: llmResult.subType || "",
-            confidence: llmResult.confidence || 0.9,
-            source: 'OpenAI'
-          };
-          console.log('Set classification from LLM:', results.classification);
+          // Override the main classification result with LLM result if valid
+          if (isValidLlmType) {
+            results.classification = {
+              type: llmType,
+              subType: llmResult.subType || "",
+              confidence: llmResult.confidence || 0.9,
+              source: 'OpenAI'
+            };
+            console.log('Set classification from LLM:', results.classification);
+          } else {
+            console.warn('LLM classification returned invalid type:', llmType);
+          }
         } else {
           console.warn('LLM classification failed, keeping AWS classification if available');
         }
@@ -838,30 +917,35 @@ const ProcessDocument = () => {
       console.log('Final results before setAnalysisResults:', results);
       setAnalysisResults({...results});
       
-      // Pass the results to the handler function
-      // This will trigger the DocumentClassification component to update via props
-      handleClassifyDocument({...results});
+      // Check if we have a valid classification before completing the step
+      const hasValidClassification = isValidClassification(results.classification);
       
-      // Force a re-render of all components by explicitly updating the state
-      // This ensures both the workflow step content and DocumentClassification card are updated
-      setWorkflowSteps(prevSteps => {
-        // Create a fresh copy of all steps to trigger a re-render
-        return prevSteps.map(step => {
-          if (step.id === 2) { // Only update the Analyse step
-            // Recreate the step object to force React to re-render it
-            return { 
-              ...step,
-              completed: true // Mark the step as completed
-            };
-          } else if (step.id === 3) { // Next step
-            return {
-              ...step,
-              locked: false // Unlock the next step
-            };
-          }
-          return step;
+      if (hasValidClassification) {
+        // Pass the results to the handler function
+        // This will trigger the DocumentClassification component to update via props
+        handleClassifyDocument({...results});
+      } else {
+        console.warn('No valid classification found, step will remain incomplete');
+        setIsAnalysing(false);
+        
+        // Update the workflow steps to reflect the invalid classification
+        setWorkflowSteps(prevSteps => {
+          return prevSteps.map(step => {
+            if (step.id === 2) { // Only update the Analyse step
+              return { 
+                ...step,
+                completed: false // Mark the step as not completed due to invalid classification
+              };
+            } else if (step.id === 3) { // Next step
+              return {
+                ...step,
+                locked: true // Keep the next step locked
+              };
+            }
+            return step;
+          });
         });
-      });
+      }
         
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -888,9 +972,11 @@ const ProcessDocument = () => {
     autoClassify,
     useTextExtraction,
     scanForTFN,
+    conductFraudCheck,
     setAutoClassify,
     setUseTextExtraction,
     setScanForTFN,
+    setConductFraudCheck,
     ref: documentClassificationRef
   };
 
@@ -968,7 +1054,7 @@ const ProcessDocument = () => {
       {/* Main layout with 2 columns */}
       <div className="w-full px-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT SIDE - Workflow stepper and step-specific content */}
+          {/* LEFT SIDE - Workflow stepper only */}
           <div className="lg:col-span-5 flex flex-col gap-6">
             {/* Workflow stepper card with gradient background */}
             <WorkflowStepperCard
@@ -980,14 +1066,9 @@ const ProcessDocument = () => {
               onStepClick={handleStepClick}
               expandedStep={currentStep}
             />
-            
-            {/* Step-specific content for upload step */}
-            {currentStep === 1 && (
-              <DocumentUpload onFileSelect={handleFileSelect} />
-            )}
           </div>
           
-          {/* RIGHT SIDE - Document viewer */}
+          {/* RIGHT SIDE - Document upload, classification, control, and viewer */}
           <div className="lg:col-span-7">
             {/* Only show original stepper on smaller screens */}
             <div className="lg:hidden w-full mb-6">
@@ -996,6 +1077,11 @@ const ProcessDocument = () => {
                 onStepClick={handleStepClick} 
               />
             </div>
+            
+            {/* Step-specific content for upload step - moved to right column */}
+            {currentStep === 1 && (
+              <DocumentUpload onFileSelect={handleFileSelect} />
+            )}
             
             {/* Add DocumentClassification component above DocumentViewer */}
             {selectedFile && (
@@ -1009,9 +1095,13 @@ const ProcessDocument = () => {
                   autoClassify={autoClassify}
                   useTextExtraction={useTextExtraction}
                   scanForTFN={scanForTFN}
+                  conductFraudCheck={conductFraudCheck}
                   setAutoClassify={setAutoClassify}
                   setUseTextExtraction={setUseTextExtraction}
                   setScanForTFN={setScanForTFN}
+                  setConductFraudCheck={setConductFraudCheck}
+                  isCollapsed={isClassificationCardCollapsed}
+                  setIsCollapsed={setIsClassificationCardCollapsed}
                 />
               </Card>
             )}
@@ -1033,18 +1123,20 @@ const ProcessDocument = () => {
               </div>
             )}
             
-            {/* Document viewer - This is the only place where the document viewer should be */}
-            <Card extra="w-full p-6">
-              <div className="bg-white dark:bg-navy-800 rounded-xl overflow-hidden">
-                <DocumentViewer 
-                  file={selectedFile} 
-                  classificationResults={analysisResults} 
-                  redactedItems={redactedItems}
-                  showExtractedText={autoClassify && useTextExtraction}
-                  currentStep={currentStep}
-                />
-              </div>
-            </Card>
+            {/* Document viewer - Only show when not in upload step (step 1) */}
+            {currentStep > 1 && selectedFile && (
+              <Card extra="w-full p-6">
+                <div className="bg-white dark:bg-navy-800 rounded-xl overflow-hidden">
+                  <DocumentViewer 
+                    file={selectedFile} 
+                    classificationResults={analysisResults} 
+                    redactedItems={redactedItems}
+                    showExtractedText={autoClassify && useTextExtraction}
+                    currentStep={currentStep}
+                  />
+                </div>
+              </Card>
+            )}
           </div>
         </div>
       </div>

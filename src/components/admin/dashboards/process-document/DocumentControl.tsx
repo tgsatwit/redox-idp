@@ -179,6 +179,9 @@ const DroppableElement = ({
 }) => {
   const { element, field, matched } = match;
   
+  // Check if this element requires mandatory redaction
+  const requiresRedaction = element.action.toLowerCase().includes('redact');
+  
   const { isOver, setNodeRef } = useDroppable({
     id: element.id as UniqueIdentifier,
     data: {
@@ -192,7 +195,7 @@ const DroppableElement = ({
     <div 
       ref={setNodeRef}
       className={`flex items-center justify-between p-2 rounded-md ${
-        isSelectedForRedaction
+        isSelectedForRedaction || (requiresRedaction && matched)
           ? 'bg-red-50 dark:bg-red-900/10 border border-red-300 dark:border-red-800/30'
           : matched 
             ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30' 
@@ -214,6 +217,11 @@ const DroppableElement = ({
         <span className="font-medium text-navy-700 dark:text-white text-sm">
           {element.name}
         </span>
+        {requiresRedaction && matched && (
+          <span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+            Auto-Redact
+          </span>
+        )}
       </div>
       
       <div className="flex items-center">
@@ -232,7 +240,11 @@ const DroppableElement = ({
                       ? 'text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/20' 
                       : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-navy-700'
                   }`}
-                  title={isSelectedForRedaction ? "Remove from redaction" : "Select for redaction"}
+                  disabled={requiresRedaction}
+                  title={requiresRedaction 
+                    ? "Redaction required by configuration" 
+                    : (isSelectedForRedaction ? "Remove from redaction" : "Select for redaction")}
+                  style={requiresRedaction ? { opacity: isSelectedForRedaction ? 1 : 0.5, cursor: 'not-allowed' } : {}}
                 >
                   <MdHideImage className="w-4 h-4" />
                 </button>
@@ -453,6 +465,11 @@ const DocumentControl = ({
     fetchDocumentElements();
   }, [documentType, documentSubType, extractedFields]);
   
+  // Function to check if an element requires mandatory redaction
+  const requiresRedaction = (element: DocumentElement): boolean => {
+    return element.action.toLowerCase().includes('redact');
+  };
+  
   // Match document elements with extracted fields based on name and aliases
   const matchElementsWithFields = (elements: DocumentElement[]) => {
     if (!elements.length || !extractedFields.length) {
@@ -480,6 +497,16 @@ const DocumentControl = ({
         );
       });
       
+      // Check if this element requires redaction based on its action
+      if (requiresRedaction(element) && matchedField) {
+        // Automatically add to redacted elements
+        setRedactedElements(prev => {
+          const newSet = new Set(prev);
+          newSet.add(element.id);
+          return newSet;
+        });
+      }
+      
       return {
         element,
         field: matchedField || null,
@@ -497,6 +524,11 @@ const DocumentControl = ({
         matched: m.matched
       })));
     }
+    
+    // Update redacted items list after auto-redaction
+    setTimeout(() => {
+      updateRedactionItems();
+    }, 0);
   };
   
   // Function to automatically match unmatched fields to elements
@@ -669,6 +701,15 @@ const DocumentControl = ({
             matched: true
           };
           
+          // Add to redaction if needed
+          if (requiresRedaction(newMatches[matchIndex].element)) {
+            setRedactedElements(prevRedacted => {
+              const newSet = new Set(prevRedacted);
+              newSet.add(elementId);
+              return newSet;
+            });
+          }
+          
           // Remove the matched element from unmatchedElements to prevent duplicate matches
           unmatchedElements.splice(bestMatch, 1);
           matchCount++;
@@ -690,7 +731,7 @@ const DocumentControl = ({
           .map(m => ({
             element: m.element,
             field: m.field!,
-            matched: true
+            matched: m.matched
           }));
         
         onFieldsMatched(matchedFields);
@@ -698,6 +739,16 @@ const DocumentControl = ({
       
       // Force a re-render to ensure UI updates
       setForceUpdate(prev => prev + 1);
+      
+      // Auto-apply redactions if any elements require redaction
+      // Need to use setTimeout to ensure all state updates have been processed
+      setTimeout(() => {
+        // Check if we have elements to redact after matching
+        if (hasElementsToRedact()) {
+          console.log('Auto-applying redactions after auto-match');
+          handleApplyRedactions();
+        }
+      }, 100);
     }
     
     // Set the auto-match results
@@ -781,6 +832,20 @@ const DocumentControl = ({
     setMatchedElements(prev => {
       const updated = prev.map(match => {
         if (match.element.id === elementId) {
+          // If this match requires redaction, add it to redacted elements
+          if (requiresRedaction(match.element)) {
+            setRedactedElements(prevRedacted => {
+              const newSet = new Set(prevRedacted);
+              newSet.add(match.element.id);
+              return newSet;
+            });
+            
+            // Schedule an update of redacted items
+            setTimeout(() => {
+              updateRedactionItems();
+            }, 0);
+          }
+          
           return {
             ...match,
             field,
@@ -846,15 +911,27 @@ const DocumentControl = ({
   
   // Toggle element redaction
   const toggleElementRedaction = (element: DocumentElement, field: ExtractedField | null) => {
-    setRedactedElements(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(element.id)) {
-        newSet.delete(element.id);
-      } else {
+    // Check if this element has a mandatory redaction (action contains 'redact')
+    if (requiresRedaction(element)) {
+      // If the element requires redaction, we should not allow to un-redact it
+      // Make sure it's added to redacted elements
+      setRedactedElements(prev => {
+        const newSet = new Set(prev);
         newSet.add(element.id);
-      }
-      return newSet;
-    });
+        return newSet;
+      });
+    } else {
+      // Normal toggle behavior for non-mandatory redactions
+      setRedactedElements(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(element.id)) {
+          newSet.delete(element.id);
+        } else {
+          newSet.add(element.id);
+        }
+        return newSet;
+      });
+    }
     
     // Notify parent of updated redacted items
     updateRedactionItems();
@@ -886,14 +963,16 @@ const DocumentControl = ({
     setTimeout(() => {
       const redactedItems = [];
       
-      // Add redacted elements
-      for (const elementId of Array.from(redactedElements)) {
-        const element = matchedElements.find(m => m.element.id === elementId);
-        if (element) {
+      // Find all elements that need redaction (either manually selected or due to action)
+      for (const match of matchedElements) {
+        if (match.matched && (
+            redactedElements.has(match.element.id) || 
+            (requiresRedaction(match.element))
+          )) {
           redactedItems.push({
-            id: elementId,
+            id: match.element.id,
             type: 'element' as const,
-            name: element.element.name
+            name: match.element.name
           });
         }
       }
@@ -918,7 +997,12 @@ const DocumentControl = ({
   
   // Check if element is selected for redaction
   const isElementSelectedForRedaction = (elementId: string) => {
-    return redactedElements.has(elementId);
+    // Find the element to check if it requires redaction by action
+    const elementMatch = matchedElements.find(match => match.element.id === elementId);
+    const requiresMandatoryRedaction = elementMatch && requiresRedaction(elementMatch.element) && elementMatch.matched;
+    
+    // Element is selected if manually added to redactedElements OR it requires mandatory redaction
+    return redactedElements.has(elementId) || !!requiresMandatoryRedaction;
   };
   
   // Check if field is selected for redaction
@@ -1098,48 +1182,51 @@ const DocumentControl = ({
         boundingBox?: any;
       }> = [];
       
-      // Add redacted elements
-      for (const elementId of Array.from(redactedElements)) {
-        const matchData = matchedElements.find(m => m.element.id === elementId);
-        if (matchData) {
-          const { element, field } = matchData;
+      // Process all matched elements that need redaction
+      for (const matchData of matchedElements) {
+        const { element, field, matched } = matchData;
+        
+        // Skip if not matched or doesn't need redaction
+        if (!matched || 
+            (!redactedElements.has(element.id) && !requiresRedaction(element))) {
+          continue;
+        }
+        
+        console.log(`Processing redacted element: ${element.name}`);
+        
+        // Determine the best value to use for finding the text in the document
+        let valueForRedaction = field?.text || field?.value;
+        let boundingBox = undefined;
+        
+        if (valueForRedaction) {
+          // Try to find bounding box from Textract data
+          boundingBox = findBoundingBoxForField(valueForRedaction);
+          console.log(`Element ${element.name} has value "${valueForRedaction}" with bounding box:`, boundingBox);
+        } else {
+          // Try using the element name as a fallback
+          console.log(`No field value for ${element.name}, trying to use element name`);
+          boundingBox = findBoundingBoxForField(element.name);
           
-          console.log(`Processing redacted element: ${element.name}`);
-          
-          // Determine the best value to use for finding the text in the document
-          let valueForRedaction = field?.text || field?.value;
-          let boundingBox = undefined;
-          
-          if (valueForRedaction) {
-            // Try to find bounding box from Textract data
-            boundingBox = findBoundingBoxForField(valueForRedaction);
-            console.log(`Element ${element.name} has value "${valueForRedaction}" with bounding box:`, boundingBox);
-          } else {
-            // Try using the element name as a fallback
-            console.log(`No field value for ${element.name}, trying to use element name`);
-            boundingBox = findBoundingBoxForField(element.name);
-            
-            // Also try aliases if available
-            if (!boundingBox && element.aliases && element.aliases.length > 0) {
-              for (const alias of element.aliases) {
-                boundingBox = findBoundingBoxForField(alias);
-                if (boundingBox) {
-                  valueForRedaction = alias;
-                  console.log(`Found bounding box using alias "${alias}"`);
-                  break;
-                }
+          // Also try aliases if available
+          if (!boundingBox && element.aliases && element.aliases.length > 0) {
+            for (const alias of element.aliases) {
+              boundingBox = findBoundingBoxForField(alias);
+              if (boundingBox) {
+                valueForRedaction = alias;
+                console.log(`Found bounding box using alias "${alias}"`);
+                break;
               }
             }
           }
-          
-          redactedItems.push({
-            id: element.id,
-            type: 'element',
-            name: element.name,
-            value: valueForRedaction,
-            boundingBox: boundingBox
-          });
         }
+        
+        redactedItems.push({
+          id: element.id,
+          type: 'element',
+          name: element.name,
+          value: valueForRedaction,
+          boundingBox: boundingBox
+        });
       }
       
       // Add redacted fields
@@ -1281,10 +1368,20 @@ const DocumentControl = ({
     setForceUpdate(prev => prev + 1);
   };
 
+  // Check if there are any elements to redact (either manual or required by configuration)
+  const hasElementsToRedact = (): boolean => {
+    const hasManualRedactions = redactedElements.size > 0 || redactedFields.size > 0;
+    const hasRequiredRedactions = matchedElements.some(
+      match => match.matched && requiresRedaction(match.element)
+    );
+    
+    return hasManualRedactions || hasRequiredRedactions;
+  };
+
   return (
     <Card extra="w-full p-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Control</h3>
+        <h3 className="text-2xl font-bold text-navy-700 dark:text-white">Document Control</h3>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-navy-700"
@@ -1502,11 +1599,11 @@ const DocumentControl = ({
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          Data Elements
+                          Resolved Data Elements
                         </h4>
                         <button
                           onClick={handleApplyRedactions}
-                          disabled={isApplyingRedactions || (redactedElements.size === 0 && redactedFields.size === 0)}
+                          disabled={isApplyingRedactions || !hasElementsToRedact()}
                           className="flex items-center mr-3 px-3 py-1 text-xs font-medium rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isApplyingRedactions ? (
