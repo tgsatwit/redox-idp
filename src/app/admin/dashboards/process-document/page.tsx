@@ -296,7 +296,7 @@ const ProcessDocument = () => {
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
-                  Identify Required Data Elements
+                  Automtically Identify Data Elements
                 </p>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 
@@ -321,7 +321,7 @@ const ProcessDocument = () => {
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
                 <p className="font-medium text-gray-800 dark:text-white">
-                  Redact Elements
+                  Automatically Redact Elements
                 </p>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 

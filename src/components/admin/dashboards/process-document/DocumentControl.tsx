@@ -998,7 +998,7 @@ const DocumentControl = ({
 
   return (
     <Card extra="w-full p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between">
         <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Control</h3>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -1033,17 +1033,10 @@ const DocumentControl = ({
               
               <div className="w-full max-w-md p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm">
                 <div className="flex items-center mb-2">
-                  <MdInfo className="w-5 h-5 mr-1 text-amber-500" />
                   <span className="text-gray-700 dark:text-gray-300 font-medium">Troubleshooting DynamoDB Issues:</span>
                 </div>
-                <ul className="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1">
-                  <li>Check if your AWS credentials have DynamoDB permissions</li>
-                  <li>Verify the table name <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{DYNAMODB_ELEMENT_TABLE}</code> exists</li>
-                  <li>Ensure the correct AWS region is configured</li>
-                  <li>Check network connectivity to AWS services</li>
-                </ul>
 
-                <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
+                <div className="mt-8 pt-3 border-t border-red-200 dark:border-red-800">
                   <div className="flex items-center mb-2">
                     <MdStorage className="w-5 h-5 mr-1 text-amber-500" />
                     <span className="text-gray-700 dark:text-gray-300 font-medium">Document Type Configuration:</span>
@@ -1071,11 +1064,6 @@ const DocumentControl = ({
                 No data elements are configured for this document type. 
                 This could be due to:
               </p>
-              <ul className="text-sm mt-2 list-disc list-inside">
-                <li>Missing AWS DynamoDB configuration</li>
-                <li>No elements defined for this document type in the database</li>
-                <li>The document type "{documentType}" needs to be set up</li>
-              </ul>
 
               <div className="w-full max-w-md mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm">
                 <div className="flex items-center mb-2">
@@ -1093,9 +1081,6 @@ const DocumentControl = ({
                     </>
                   )}
                 </div>
-                <p className="mt-3 text-center">
-                  Contact your administrator to configure document elements for this document type
-                </p>
               </div>
             </div>
           ) : (
@@ -1104,7 +1089,7 @@ const DocumentControl = ({
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
-              <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="my-4 pb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                     {matchStats.matched}/{matchStats.total}
@@ -1143,84 +1128,6 @@ const DocumentControl = ({
                 </div>
               </div>
               
-              <div className="mb-4 flex justify-between items-center">
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Redaction Controls
-                  </h4>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Select elements to redact, then apply redactions
-                  </p>
-                </div>
-                <button
-                  onClick={handleApplyRedactions}
-                  disabled={isApplyingRedactions || (redactedElements.size === 0 && redactedFields.size === 0)}
-                  className={`flex items-center px-4 py-2 rounded-md transition-colors ${
-                    redactedElements.size > 0 || redactedFields.size > 0
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
-                  }`}
-                >
-                  {isApplyingRedactions ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Applying...
-                    </>
-                  ) : (
-                    <>
-                      <MdHideImage className="mr-2 h-4 w-4" />
-                      Apply Redactions
-                    </>
-                  )}
-                </button>
-              </div>
-              
-              {(redactedElements.size > 0 || redactedFields.size > 0) && (
-                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-md">
-                  <h4 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
-                    Selected for Redaction:
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from(redactedElements).map(elementId => {
-                      const element = matchedElements.find(m => m.element.id === elementId)?.element;
-                      if (!element) return null;
-                      return (
-                        <span key={elementId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
-                          {element.name}
-                          <button 
-                            onClick={() => toggleElementRedaction(element, null)} 
-                            className="ml-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                          >
-                            <MdClose className="w-3 h-3" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                    {Array.from(redactedFields).map(fieldId => {
-                      const field = extractedFields.find(f => 
-                        (f.id && f.id === fieldId) || f.name === fieldId || f.label === fieldId
-                      );
-                      if (!field) return null;
-                      const fieldName = field.name || field.label || 'Unknown field';
-                      return (
-                        <span key={fieldId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
-                          {fieldName}
-                          <button 
-                            onClick={() => toggleFieldRedaction(field)} 
-                            className="ml-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                          >
-                            <MdClose className="w-3 h-3" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              
               <div className="overflow-hidden">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1228,19 +1135,8 @@ const DocumentControl = ({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          Unmatched Extracted Fields
+                          Extracted Fields
                         </h4>
-                        {autoMatchResults && autoMatchResults.timestamp > Date.now() - 5000 && (
-                          <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
-                            autoMatchResults.count > 0 
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                          }`}>
-                            {autoMatchResults.count > 0 
-                              ? `Auto-matched ${autoMatchResults.count} field${autoMatchResults.count > 1 ? 's' : ''}!`
-                              : 'No matches found'}
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center">
                         <button
@@ -1250,9 +1146,6 @@ const DocumentControl = ({
                           <BsLightningCharge className="mr-1" />
                           Auto-Match
                         </button>
-                        <p className="text-xs text-indigo-600 dark:text-indigo-400">
-                          Drag fields to match
-                        </p>
                       </div>
                     </div>
                     <div 
@@ -1286,9 +1179,26 @@ const DocumentControl = ({
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                           Required Data Elements
                         </h4>
-                        <p className="text-xs text-indigo-600 dark:text-indigo-400">
-                          Drop fields here
-                        </p>
+                        <button
+                          onClick={handleApplyRedactions}
+                          disabled={isApplyingRedactions || (redactedElements.size === 0 && redactedFields.size === 0)}
+                          className="flex items-center mr-3 px-3 py-1 text-xs font-medium rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                        >
+                          {isApplyingRedactions ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Applying...
+                            </>
+                          ) : (
+                            <>
+                              <MdHideImage className="mr-1" />
+                              Apply Redactions
+                            </>
+                          )}
+                        </button>
                       </div>
                       <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto">
                         <div className="grid grid-cols-1 gap-2">
@@ -1314,15 +1224,12 @@ const DocumentControl = ({
                       </div>
                     </div>
                     
-                    {/* Optional Data Elements - now in the right column, bottom */}
+                    {/* Additional Data Elements - now in the right column, bottom */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          Optional Data Elements
+                          Additional Data Elements
                         </h4>
-                        <p className="text-xs text-indigo-600 dark:text-indigo-400">
-                          Drop fields here
-                        </p>
                       </div>
                       <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto">
                         <div className="grid grid-cols-1 gap-2">
@@ -1342,7 +1249,7 @@ const DocumentControl = ({
                         
                         {matchedElements.filter(match => !match.element.required).length === 0 && (
                           <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
-                            No optional elements configured
+                            No additional elements configured
                           </p>
                         )}
                       </div>
