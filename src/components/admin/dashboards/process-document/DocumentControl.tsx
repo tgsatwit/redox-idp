@@ -997,7 +997,7 @@ const DocumentControl = ({
   };
 
   return (
-    <Card extra="w-full p-4">
+    <Card extra="w-full p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Control</h3>
         <button
@@ -1132,10 +1132,10 @@ const DocumentControl = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     {/* Unmatched extracted fields - now in the left column */}
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                          Extracted Fields
+                          Extracted Fields <span className="text-gray-500 dark:text-gray-700">(Unmatched)</span>
                         </h4>
                       </div>
                       <div className="flex items-center">
@@ -1150,7 +1150,7 @@ const DocumentControl = ({
                     </div>
                     <div 
                       id="unmatched-fields-container"
-                      className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[550px] overflow-y-auto"
+                      className="rounded-lg p-3 max-h-[550px] overflow-y-auto"
                     >
                       {getUnmatchedFields().length > 0 ? (
                         <div className="grid grid-cols-1 gap-2">
@@ -1175,7 +1175,7 @@ const DocumentControl = ({
                   <div className="flex flex-col gap-4">
                     {/* Required Data Elements - now in the right column, top */}
                     <div>
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-4">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                           Required Data Elements
                         </h4>
@@ -1200,7 +1200,7 @@ const DocumentControl = ({
                           )}
                         </button>
                       </div>
-                      <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                      <div className="rounded-lg p-3 max-h-[250px] overflow-y-auto">
                         <div className="grid grid-cols-1 gap-2">
                           {matchedElements
                             .filter(match => match.element.required)

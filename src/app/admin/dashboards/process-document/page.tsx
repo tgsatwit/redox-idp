@@ -1035,7 +1035,6 @@ const ProcessDocument = () => {
             
             {/* Document viewer - This is the only place where the document viewer should be */}
             <Card extra="w-full p-6">
-              <h3 className="text-xl font-bold mb-4 text-navy-700 dark:text-white">Document Viewer</h3>
               <div className="bg-white dark:bg-navy-800 rounded-xl overflow-hidden">
                 <DocumentViewer 
                   file={selectedFile} 
