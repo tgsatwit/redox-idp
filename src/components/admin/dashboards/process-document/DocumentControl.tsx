@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Card from '@/components/card';
 import { MdSync, MdError, MdWarning, MdCheckCircle, MdContentCopy, MdSettings, MdInfo, MdStorage, MdDragIndicator, MdAutorenew, MdClose, MdHideImage, MdNavigateNext, MdNavigateBefore } from 'react-icons/md';
-import { BsCheckCircle, BsLightningCharge } from 'react-icons/bs';
+import { BsCheckCircle, BsLightningCharge, BsFillCheckCircleFill } from 'react-icons/bs';
 import { FiSearch } from 'react-icons/fi';
 import { 
   DndContext, 
@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/core';
 import { Id } from '@/types/hui-types';
 import { createPortal } from 'react-dom';
+import ClickablePillLabel from '@/components/clickable-pill-label';
 
 // Constants for configuration
 const DYNAMODB_ELEMENT_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_ELEMENT_TABLE || 'document-processor-elements';
@@ -217,11 +218,6 @@ const DroppableElement = ({
         <span className="font-medium text-navy-700 dark:text-white text-sm">
           {element.name}
         </span>
-        {requiresRedaction && matched && (
-          <span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-            Auto-Redact
-          </span>
-        )}
       </div>
       
       <div className="flex items-center">
@@ -1382,20 +1378,51 @@ const DocumentControl = ({
     <Card extra="w-full p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-2xl font-bold text-navy-700 dark:text-white">Document Control</h3>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-navy-700"
-        >
-          {isExpanded ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+          {/* Inserted clickable pill label for required elements resolved status */}
+          <div className="flex items-center gap-2">
+          {matchStats.requiredTotal > 0 && (
+            <div className="my-4 dark:text-white">
+              <ClickablePillLabel
+                label={
+                  matchStats.requiredUnresolved === 0
+                    ? `All ${matchStats.requiredTotal} Required Resolved`
+                    : `${matchStats.requiredTotal - matchStats.requiredUnresolved}/${matchStats.requiredTotal} Resolved`
+                }
+                icon={
+                  matchStats.requiredUnresolved === 0
+                    ? <BsFillCheckCircleFill />
+                    : <MdWarning />
+                }
+                iconColor={
+                  matchStats.requiredUnresolved === 0
+                    ? 'text-green-500'
+                    : 'text-amber-500'
+                }
+                bg={
+                  matchStats.requiredUnresolved === 0
+                    ? 'bg-[#C9FBD5] dark:!bg-navy-700'
+                    : 'bg-[#FFF6DA] dark:!bg-navy-700'
+                }
+                mb="mb-0"
+                onClick={() => {}}
+              />
+            </div>
           )}
-        </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-navy-700"
+          >
+            {isExpanded ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500 dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
       
       {isExpanded && (
@@ -1415,6 +1442,7 @@ const DocumentControl = ({
               
               <div className="w-full max-w-md p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm">
                 <div className="flex items-center mb-2">
+                  <MdStorage className="w-5 h-5 mr-1 text-amber-500" />
                   <span className="text-gray-700 dark:text-gray-300 font-medium">Troubleshooting DynamoDB Issues:</span>
                 </div>
 
