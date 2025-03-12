@@ -510,46 +510,50 @@ const DocumentClassification = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
+        <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Classification</h3>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
-          >
-            {isCollapsed ? <MdKeyboardArrowDown size={20} /> : <MdKeyboardArrowUp size={20} />}
-          </button>
-          <h3 className="text-xl font-bold text-navy-700 dark:text-white">Document Classification</h3>
-        </div>
-        <div>
-          {analysisResults.classification ? (
-            analysisResults.classification.type === 'undefined' ? (
-              <ClickablePillLabel
-                label="undefined"
-                icon={<MdError />}
-                iconColor="text-red-500"
-                bg="bg-[#FDE0D0] dark:!bg-navy-700"
-                mb="mb-0"
-                onClick={() => {}}
-              />
+          <div>
+            {analysisResults.classification ? (
+              analysisResults.classification.type === 'undefined' ? (
+                <ClickablePillLabel
+                  label="undefined"
+                  icon={<MdError />}
+                  iconColor="text-red-500"
+                  bg="bg-[#FDE0D0] dark:!bg-navy-700"
+                  mb="mb-0"
+                  onClick={() => {}}
+                />
+              ) : (
+                <ClickablePillLabel
+                  label={analysisResults.classification.type}
+                  icon={<BsFillCheckCircleFill />}
+                  iconColor="text-green-500"
+                  bg="bg-[#C9FBD5] dark:!bg-navy-700"
+                  mb="mb-0"
+                  onClick={() => {}}
+                />
+              )
             ) : (
               <ClickablePillLabel
-                label={analysisResults.classification.type}
-                icon={<BsFillCheckCircleFill />}
-                iconColor="text-green-500"
-                bg="bg-[#C9FBD5] dark:!bg-navy-700"
+                label="Unclassified"
+                icon={<MdWarning />}
+                iconColor="text-amber-500"
+                bg="bg-[#FFF6DA] dark:!bg-navy-700"
                 mb="mb-0"
                 onClick={() => {}}
               />
-            )
-          ) : (
-            <ClickablePillLabel
-              label="Unclassified"
-              icon={<MdWarning />}
-              iconColor="text-amber-500"
-              bg="bg-[#FFF6DA] dark:!bg-navy-700"
-              mb="mb-0"
-              onClick={() => {}}
-            />
-          )}
+            )}
+          </div>
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-navy-700"
+          >
+            {isCollapsed ? (
+              <MdKeyboardArrowDown size={24} className="text-gray-500 dark:text-white" />
+            ) : (
+              <MdKeyboardArrowUp size={24} className="text-gray-500 dark:text-white" />
+            )}
+          </button>
         </div>
       </div>
 
