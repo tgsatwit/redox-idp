@@ -79,6 +79,7 @@ interface DocumentControlProps {
   }>) => void;
   isLoading?: boolean;
   textractData?: any;
+  onValidationChange?: (isValid: boolean) => void;
 }
 
 // Drag item type definition
@@ -221,7 +222,7 @@ const DroppableElement = ({
               {field.value || field.text || 'No value'}
             </span>
             
-            <div className="flex">
+            <div className="flex mr-6">
               {onSelectForRedaction && (
                 <button
                   onClick={() => onSelectForRedaction(element, field)}
@@ -250,7 +251,7 @@ const DroppableElement = ({
         )}
         
         {!matched && (
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 mr-8">
             {isOver ? "Drop to match" : "Drop field here"}
           </span>
         )}
@@ -267,7 +268,8 @@ const DocumentControl = ({
   onRedactionChanged,
   onApplyRedactions,
   isLoading = false,
-  textractData
+  textractData,
+  onValidationChange
 }: DocumentControlProps) => {
   const [documentElements, setDocumentElements] = useState<DocumentElement[]>([]);
   const [isLoadingElements, setIsLoadingElements] = useState(false);
@@ -293,6 +295,9 @@ const DocumentControl = ({
   
   // New state for redaction process
   const [isApplyingRedactions, setIsApplyingRedactions] = useState(false);
+  
+  // New state for removed required elements
+  const [removedRequiredElements, setRemovedRequiredElements] = useState<Set<string>>(new Set());
   
   // Setup sensors for drag and drop
   const sensors = useSensors(
@@ -837,6 +842,12 @@ const DocumentControl = ({
     matched: matchedElements.filter(m => m.matched).length,
     requiredTotal: matchedElements.filter(m => m.element.required).length,
     requiredMatched: matchedElements.filter(m => m.element.required && m.matched).length,
+    requiredRemoved: Array.from(removedRequiredElements).length,
+    requiredUnresolved: matchedElements.filter(m => 
+      m.element.required && 
+      !m.matched && 
+      !removedRequiredElements.has(m.element.id)
+    ).length,
   };
 
   // Find bounding box for a field based on its value
@@ -996,6 +1007,41 @@ const DocumentControl = ({
     }
   };
 
+  // Check validation status and notify parent component
+  useEffect(() => {
+    if (!onValidationChange) return;
+    
+    // Check if all required elements that are not removed are matched
+    const requiredElementsUnmatched = matchedElements.filter(match => 
+      match.element.required && 
+      !match.matched && 
+      !removedRequiredElements.has(match.element.id)
+    ).length;
+    
+    // Valid if all required elements are either matched or explicitly removed
+    const isValid = requiredElementsUnmatched === 0;
+    
+    onValidationChange(isValid);
+  }, [matchedElements, removedRequiredElements, onValidationChange]);
+
+  // Toggle removed status for a required element
+  const toggleRequiredElementRemoval = (elementId: string) => {
+    setRemovedRequiredElements(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(elementId)) {
+        newSet.delete(elementId);
+      } else {
+        newSet.add(elementId);
+      }
+      return newSet;
+    });
+  };
+
+  // Helper to check if an element is in the removed list
+  const isRequiredElementRemoved = (elementId: string) => {
+    return removedRequiredElements.has(elementId);
+  };
+
   return (
     <Card extra="w-full p-6">
       <div className="flex items-center justify-between">
@@ -1100,14 +1146,14 @@ const DocumentControl = ({
                 </div>
                 <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 text-center">
                   <div className={`text-2xl font-bold ${
-                    matchStats.requiredMatched === matchStats.requiredTotal 
+                    matchStats.requiredUnresolved === 0
                       ? 'text-green-600 dark:text-green-400' 
                       : 'text-red-600 dark:text-red-400'
                   }`}>
-                    {matchStats.requiredMatched}/{matchStats.requiredTotal}
+                    {matchStats.requiredTotal - matchStats.requiredUnresolved}/{matchStats.requiredTotal}
                   </div>
                   <div className="text-xs text-gray-600 dark:text-gray-400">
-                    Required Elements
+                    Required Elements Resolved
                   </div>
                 </div>
                 <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 text-center">
@@ -1132,7 +1178,7 @@ const DocumentControl = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     {/* Unmatched extracted fields - now in the left column */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                           Extracted Fields <span className="text-gray-500 dark:text-gray-700">(Unmatched)</span>
@@ -1175,14 +1221,14 @@ const DocumentControl = ({
                   <div className="flex flex-col gap-4">
                     {/* Required Data Elements - now in the right column, top */}
                     <div>
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                           Required Data Elements
                         </h4>
                         <button
                           onClick={handleApplyRedactions}
                           disabled={isApplyingRedactions || (redactedElements.size === 0 && redactedFields.size === 0)}
-                          className="flex items-center mr-3 px-3 py-1 text-xs font-medium rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                          className="flex items-center mr-3 px-3 py-1 text-xs font-medium rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isApplyingRedactions ? (
                             <>
@@ -1203,22 +1249,32 @@ const DocumentControl = ({
                       <div className="rounded-lg p-3 max-h-[250px] overflow-y-auto">
                         <div className="grid grid-cols-1 gap-2">
                           {matchedElements
-                            .filter(match => match.element.required)
+                            .filter(match => match.element.required && !removedRequiredElements.has(match.element.id))
                             .map((match, index) => (
-                              <DroppableElement
-                                key={match.element.id || `req-${index}`}
-                                match={match}
-                                index={index}
-                                onRemoveMatch={removeMatch}
-                                isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
-                                onSelectForRedaction={toggleElementRedaction}
-                              />
+                              <div key={match.element.id || `req-${index}`} className="relative group">
+                                <DroppableElement
+                                  match={match}
+                                  index={index}
+                                  onRemoveMatch={removeMatch}
+                                  isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
+                                  onSelectForRedaction={toggleElementRedaction}
+                                />
+                                <button
+                                  onClick={() => toggleRequiredElementRemoval(match.element.id)}
+                                  className="absolute top-2 right-2 p-1 rounded-full bg-gray-200 dark:bg-navy-600 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-navy-500 z-10"
+                                  title="Remove required element"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                              </div>
                             ))}
                         </div>
                         
-                        {matchedElements.filter(match => match.element.required).length === 0 && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
-                            No required elements configured
+                        {(matchedElements.filter(match => match.element.required && !removedRequiredElements.has(match.element.id)).length === 0) && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 p-3 text-center">
+                            {matchStats.requiredTotal > 0 ? 'All required elements have been removed' : 'No required elements configured'}
                           </p>
                         )}
                       </div>
@@ -1231,7 +1287,7 @@ const DocumentControl = ({
                           Additional Data Elements
                         </h4>
                       </div>
-                      <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                      <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto mb-2">
                         <div className="grid grid-cols-1 gap-2">
                           {matchedElements
                             .filter(match => !match.element.required)
@@ -1254,6 +1310,46 @@ const DocumentControl = ({
                         )}
                       </div>
                     </div>
+                    
+                    {/* New section: Removed Required Data Elements */}
+                    {removedRequiredElements.size > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                            Removed Required Data Elements
+                            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                              {removedRequiredElements.size} removed
+                            </span>
+                          </h4>
+                        </div>
+                        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                          <div className="grid grid-cols-1 gap-2">
+                            {matchedElements
+                              .filter(match => match.element.required && removedRequiredElements.has(match.element.id))
+                              .map((match, index) => (
+                                <div key={match.element.id || `removed-${index}`} className="relative group">
+                                  <DroppableElement
+                                    match={match}
+                                    index={index}
+                                    onRemoveMatch={removeMatch}
+                                    isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
+                                    onSelectForRedaction={toggleElementRedaction}
+                                  />
+                                  <button
+                                    onClick={() => toggleRequiredElementRemoval(match.element.id)}
+                                    className="absolute top-2 right-2 p-1 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-300 dark:hover:bg-amber-700 z-10"
+                                    title="Restore required element"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
