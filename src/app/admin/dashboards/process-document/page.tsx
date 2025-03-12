@@ -130,6 +130,14 @@ const ProcessDocument = () => {
   const [scanForTFN, setScanForTFN] = useState(false);
   const [isClassificationCardExpanded, setIsClassificationCardExpanded] = useState(true);
   
+  const [redactedItems, setRedactedItems] = useState<Array<{
+    id: string;
+    type: 'element' | 'field';
+    name: string;
+    value?: string;
+    boundingBox?: any;
+  }>>([]);
+  
   // Helper functions for document handling
   const isFormatSupported = (file: File) => {
     return file && (file.type.startsWith('image/') || file.type === 'application/pdf');
@@ -934,6 +942,27 @@ const ProcessDocument = () => {
     fetchRetentionPolicies();
   }, []);
 
+  // Handle redactions being applied from DocumentControl
+  const handleApplyRedactions = (items: Array<{
+    id: string;
+    type: 'element' | 'field';
+    name: string;
+    value?: string;
+    boundingBox?: any;
+  }>) => {
+    setRedactedItems(items);
+    
+    // Show a success message
+    if (items.length > 0) {
+      // You could add a success notification here if needed
+      console.log(`Applied ${items.length} redactions to document`);
+      
+      // The DocumentViewer will automatically switch to redacted view when
+      // it detects changes to redactedItems with items.length > 0 if the user
+      // clicks on the "Redacted View" tab
+    }
+  };
+
   return (
     <div className="mt-6 flex w-full flex-col items-center bg-white dark:bg-navy-900 py-4">
       {/* Main layout with 2 columns */}
@@ -994,11 +1023,12 @@ const ProcessDocument = () => {
                   documentType={analysisResults.classification.type}
                   documentSubType={analysisResults.classification.subType}
                   extractedFields={analysisResults.extractedFields}
-                  isLoading={isAnalysing}
                   onFieldsMatched={(matchedFields) => {
                     console.log('Matched fields:', matchedFields);
                     // You can store and use the matched fields data here
                   }}
+                  onApplyRedactions={handleApplyRedactions}
+                  textractData={analysisResults.rawTextractData}
                 />
               </div>
             )}
@@ -1010,8 +1040,8 @@ const ProcessDocument = () => {
                 <DocumentViewer 
                   file={selectedFile} 
                   classificationResults={analysisResults} 
-                  showExtractedText={currentStep > 2}
-                  showTitle={false}
+                  redactedItems={redactedItems}
+                  showExtractedText={autoClassify && useTextExtraction}
                   currentStep={currentStep}
                 />
               </div>

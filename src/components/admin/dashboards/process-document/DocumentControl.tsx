@@ -1,7 +1,22 @@
 import { useState, useEffect } from 'react';
 import Card from '@/components/card';
-import { MdSync, MdError, MdWarning, MdCheckCircle, MdContentCopy, MdSettings, MdInfo, MdStorage } from 'react-icons/md';
-import { BsCheckCircle } from 'react-icons/bs';
+import { MdSync, MdError, MdWarning, MdCheckCircle, MdContentCopy, MdSettings, MdInfo, MdStorage, MdDragIndicator, MdAutorenew, MdClose, MdHideImage } from 'react-icons/md';
+import { BsCheckCircle, BsLightningCharge } from 'react-icons/bs';
+import { 
+  DndContext, 
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  UniqueIdentifier
+} from '@dnd-kit/core';
+import { Id } from '@/types/hui-types';
+import { createPortal } from 'react-dom';
 
 // Constants for configuration
 const DYNAMODB_ELEMENT_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_ELEMENT_TABLE || 'document-processor-elements';
@@ -38,7 +53,7 @@ interface ExtractedField {
   label?: string;
   value?: string;
   text?: string;
-  confidence?: number;
+  boundingBox?: any;
 }
 
 interface DocumentControlProps {
@@ -50,15 +65,209 @@ interface DocumentControlProps {
     field: ExtractedField;
     matched: boolean;
   }>) => void;
+  onRedactionChanged?: (redactedItems: Array<{
+    id: string;
+    type: 'element' | 'field';
+    name: string;
+  }>) => void;
+  onApplyRedactions?: (redactedItems: Array<{
+    id: string;
+    type: 'element' | 'field';
+    name: string;
+    value?: string;
+    boundingBox?: any;
+  }>) => void;
   isLoading?: boolean;
+  textractData?: any;
 }
+
+// Drag item type definition
+interface DragItem {
+  id: string;
+  type: 'field';
+  field: ExtractedField;
+}
+
+// Render a draggable field
+const DraggableField = ({ 
+  field, 
+  index, 
+  isSelected, 
+  onSelectForRedaction 
+}: { 
+  field: ExtractedField, 
+  index: number,
+  isSelected?: boolean,
+  onSelectForRedaction?: (field: ExtractedField) => void
+}) => {
+  const fieldId = field.id || field.name || `field-${index}`;
+  
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: fieldId as UniqueIdentifier,
+    data: {
+      type: 'field',
+      field,
+      id: fieldId,
+    },
+  });
+  
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 1,
+  } : undefined;
+  
+  return (
+    <div 
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`p-2 border rounded-md bg-white dark:bg-navy-800 relative cursor-move hover:shadow-md transition-shadow duration-200 ${
+        isSelected 
+          ? 'border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-900/10' 
+          : 'border-gray-200 dark:border-navy-600'
+      }`}
+    >
+      <div className="flex justify-between items-center mb-1">
+        <div className="flex items-center">
+          <MdDragIndicator className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+          <span className="font-medium text-sm text-navy-700 dark:text-white">
+            {field.name || field.label || `Field ${index + 1}`}
+          </span>
+        </div>
+        {onSelectForRedaction && (
+          <button 
+            onClick={() => onSelectForRedaction(field)}
+            className={`p-1 rounded ${
+              isSelected 
+                ? 'text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/20' 
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-navy-700'
+            }`}
+            title={isSelected ? "Remove from redaction" : "Select for redaction"}
+          >
+            <MdHideImage className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 truncate pl-6">
+        {field.value || field.text || 'No value'}
+      </p>
+    </div>
+  );
+};
+
+// Render a droppable element
+const DroppableElement = ({ 
+  match, 
+  index,
+  onRemoveMatch,
+  isSelectedForRedaction,
+  onSelectForRedaction
+}: { 
+  match: {
+    element: DocumentElement;
+    field: ExtractedField | null;
+    matched: boolean;
+  }, 
+  index: number,
+  onRemoveMatch?: (elementId: string) => void,
+  isSelectedForRedaction?: boolean,
+  onSelectForRedaction?: (element: DocumentElement, field: ExtractedField | null) => void
+}) => {
+  const { element, field, matched } = match;
+  
+  const { isOver, setNodeRef } = useDroppable({
+    id: element.id as UniqueIdentifier,
+    data: {
+      type: 'element',
+      elementId: element.id,
+    },
+    disabled: matched, // Can't drop on already matched elements
+  });
+  
+  return (
+    <div 
+      ref={setNodeRef}
+      className={`flex items-center justify-between p-2 rounded-md ${
+        isSelectedForRedaction
+          ? 'bg-red-50 dark:bg-red-900/10 border border-red-300 dark:border-red-800/30'
+          : matched 
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30' 
+            : 'bg-white dark:bg-navy-800 border-2 border-dashed border-gray-300 dark:border-gray-700'
+      } ${
+        !matched ? (
+          isOver 
+            ? 'border-indigo-500 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/10' 
+            : 'hover:border-indigo-300 dark:hover:border-indigo-700'
+        ) : ''
+      } transition-colors duration-200`}
+    >
+      <div className="flex items-center">
+        {matched ? (
+          <MdCheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mr-2" />
+        ) : (
+          <MdWarning className="w-5 h-5 text-red-500 flex-shrink-0 mr-2" />
+        )}
+        <span className="font-medium text-navy-700 dark:text-white text-sm">
+          {element.name}
+        </span>
+      </div>
+      
+      <div className="flex items-center">
+        {matched && field && (
+          <>
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 max-w-[150px] truncate mr-2">
+              {field.value || field.text || 'No value'}
+            </span>
+            
+            <div className="flex">
+              {onSelectForRedaction && (
+                <button
+                  onClick={() => onSelectForRedaction(element, field)}
+                  className={`p-1 rounded ${
+                    isSelectedForRedaction 
+                      ? 'text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/20' 
+                      : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-navy-700'
+                  }`}
+                  title={isSelectedForRedaction ? "Remove from redaction" : "Select for redaction"}
+                >
+                  <MdHideImage className="w-4 h-4" />
+                </button>
+              )}
+              
+              {onRemoveMatch && (
+                <button
+                  onClick={() => onRemoveMatch(element.id)}
+                  className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-navy-700"
+                  title="Remove match"
+                >
+                  <MdClose className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        
+        {!matched && (
+          <span className="text-xs text-gray-500">
+            {isOver ? "Drop to match" : "Drop field here"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const DocumentControl = ({
   documentType,
   documentSubType,
   extractedFields = [],
   onFieldsMatched,
-  isLoading = false
+  onRedactionChanged,
+  onApplyRedactions,
+  isLoading = false,
+  textractData
 }: DocumentControlProps) => {
   const [documentElements, setDocumentElements] = useState<DocumentElement[]>([]);
   const [isLoadingElements, setIsLoadingElements] = useState(false);
@@ -67,10 +276,32 @@ const DocumentControl = ({
     element: DocumentElement;
     field: ExtractedField | null;
     matched: boolean;
-    confidence?: number;
   }>>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [fetchAttempted, setFetchAttempted] = useState(false);
+  
+  // State for drag and drop
+  const [activeDragItem, setActiveDragItem] = useState<DragItem | null>(null);
+  // Force update counter to trigger re-renders after drag operations
+  const [forceUpdate, setForceUpdate] = useState(0);
+  // State for auto-match results
+  const [autoMatchResults, setAutoMatchResults] = useState<{count: number, timestamp: number} | null>(null);
+  
+  // State for redaction
+  const [redactedElements, setRedactedElements] = useState<Set<string>>(new Set());
+  const [redactedFields, setRedactedFields] = useState<Set<string>>(new Set());
+  
+  // New state for redaction process
+  const [isApplyingRedactions, setIsApplyingRedactions] = useState(false);
+  
+  // Setup sensors for drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10,
+      },
+    }),
+  );
   
   // Fetch document elements from DynamoDB based on document type and subtype
   useEffect(() => {
@@ -138,8 +369,7 @@ const DocumentControl = ({
       return {
         element,
         field: matchedField || null,
-        matched: !!matchedField,
-        confidence: matchedField?.confidence
+        matched: !!matchedField
       };
     });
     
@@ -155,12 +385,450 @@ const DocumentControl = ({
     }
   };
   
-  const getConfidenceColor = (confidence?: number) => {
-    if (!confidence) return 'text-gray-400';
+  // Function to automatically match unmatched fields to elements
+  const autoMatchFields = () => {
+    // Get all unmatched fields
+    const unmatchedFields = getUnmatchedFields();
+    if (!unmatchedFields.length) {
+      setAutoMatchResults({ count: 0, timestamp: Date.now() });
+      return 0;
+    }
     
-    if (confidence >= 0.9) return 'text-green-500';
-    if (confidence >= 0.7) return 'text-amber-500';
-    return 'text-red-500';
+    // Get all unmatched elements
+    const unmatchedElements = matchedElements.filter(match => !match.matched);
+    if (!unmatchedElements.length) {
+      setAutoMatchResults({ count: 0, timestamp: Date.now() });
+      return 0;
+    }
+    
+    // Create matches based on similarity between field names and element names/aliases
+    const newMatches = [...matchedElements];
+    let matchCount = 0;
+    
+    // Normalize a string for comparison (remove special chars, extra spaces, convert to lowercase)
+    const normalizeString = (str: string): string => {
+      return str
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '') // Remove special characters
+        .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
+        .trim();
+    };
+    
+    // Expand common abbreviations
+    const expandAbbreviations = (str: string): string[] => {
+      const expansions: Record<string, string> = {
+        'dob': 'date of birth',
+        'id': 'identification',
+        'ssn': 'social security number',
+        'lic': 'license',
+        'num': 'number',
+        'no': 'number',
+        'addr': 'address',
+        'exp': 'expiration',
+        'dl': 'drivers license',
+        'ln': 'last name',
+        'fn': 'first name',
+        'mi': 'middle initial',
+        'lname': 'last name',
+        'fname': 'first name',
+        'mname': 'middle name',
+        'apt': 'apartment',
+        'st': 'street',
+        'dr': 'drive',
+        'rd': 'road',
+        'ave': 'avenue',
+        'tel': 'telephone',
+        'ph': 'phone',
+        'dln': 'drivers license number',
+        'dlno': 'drivers license number',
+        'idno': 'identification number',
+      };
+      
+      // Return original string and potential expansions
+      const result = [str];
+      
+      // Check for entire string match
+      if (expansions[str]) {
+        result.push(expansions[str]);
+      }
+      
+      // Check for word-by-word expansions
+      const words = str.split(' ');
+      if (words.length > 1) {
+        const expandedWords = words.map(word => expansions[word] || word);
+        if (expandedWords.some((word, idx) => word !== words[idx])) {
+          result.push(expandedWords.join(' '));
+        }
+      }
+      
+      return result;
+    };
+    
+    // Calculate string similarity score (0-100)
+    const calculateSimilarity = (str1: string, str2: string): number => {
+      const a = normalizeString(str1);
+      const b = normalizeString(str2);
+      
+      // Exact match
+      if (a === b) return 100;
+      
+      // One string contains the other
+      if (a.includes(b) || b.includes(a)) {
+        const lengthRatio = Math.min(a.length, b.length) / Math.max(a.length, b.length);
+        return 80 * lengthRatio; // 80% score, adjusted by length ratio
+      }
+      
+      // Check for word overlap
+      const aWords = a.split(' ').filter(w => w.length > 1);
+      const bWords = b.split(' ').filter(w => w.length > 1);
+      
+      if (aWords.length === 0 || bWords.length === 0) return 0;
+      
+      // Count how many words from a appear in b and vice versa
+      const aInB = aWords.filter(word => bWords.some(bWord => bWord.includes(word) || word.includes(bWord))).length;
+      const bInA = bWords.filter(word => aWords.some(aWord => aWord.includes(word) || word.includes(aWord))).length;
+      
+      const overlapScore = (aInB / aWords.length + bInA / bWords.length) * 50;
+      
+      return overlapScore;
+    };
+    
+    // For each unmatched field, find the best matching element
+    unmatchedFields.forEach(field => {
+      const fieldName = field.name || field.label || '';
+      if (!fieldName) return;
+      
+      // Normalize field name
+      const normalizedFieldName = normalizeString(fieldName);
+      
+      // Create expanded field names with common abbreviations
+      const expandedFieldNames = expandAbbreviations(normalizedFieldName);
+      
+      // Track the best match and its score
+      let bestMatch = -1;
+      let bestScore = 0;
+      
+      // For each unmatched element, calculate match scores
+      unmatchedElements.forEach((elementMatch, index) => {
+        const element = elementMatch.element;
+        
+        // Calculate similarity with element name
+        const nameScore = expandedFieldNames.reduce((highestScore, expandedFieldName) => {
+          const similarity = calculateSimilarity(expandedFieldName, element.name);
+          return Math.max(highestScore, similarity);
+        }, 0);
+        
+        // Calculate similarity with element aliases
+        const aliasesScore = element.aliases.reduce((highestScore, alias) => {
+          // Try all expanded field names against this alias
+          const score = expandedFieldNames.reduce((best, expandedFieldName) => {
+            const similarity = calculateSimilarity(expandedFieldName, alias);
+            return Math.max(best, similarity);
+          }, 0);
+          
+          return Math.max(highestScore, score);
+        }, 0);
+        
+        // Use the highest score between name match and alias match
+        const matchScore = Math.max(nameScore, aliasesScore);
+        
+        // If this is the best match so far, update bestMatch and bestScore
+        if (matchScore > bestScore) {
+          bestScore = matchScore;
+          bestMatch = index;
+        }
+      });
+      
+      // Only consider matches with a minimum score threshold
+      const MIN_MATCH_THRESHOLD = 50; // Minimum score to consider a match valid
+      
+      if (bestMatch !== -1 && bestScore >= MIN_MATCH_THRESHOLD) {
+        const matchingElement = unmatchedElements[bestMatch];
+        const elementId = matchingElement.element.id;
+        
+        // Find the matching element in newMatches and update it
+        const matchIndex = newMatches.findIndex(m => m.element.id === elementId);
+        if (matchIndex !== -1) {
+          newMatches[matchIndex] = {
+            ...newMatches[matchIndex],
+            field,
+            matched: true
+          };
+          
+          // Remove the matched element from unmatchedElements to prevent duplicate matches
+          unmatchedElements.splice(bestMatch, 1);
+          matchCount++;
+          
+          // Debug logging
+          console.log(`Matched "${fieldName}" to "${matchingElement.element.name}" with score ${bestScore}`);
+        }
+      }
+    });
+    
+    // Only update state if we made some matches
+    if (matchCount > 0) {
+      setMatchedElements(newMatches);
+      
+      // Notify parent of updated matches
+      if (onFieldsMatched) {
+        const matchedFields = newMatches
+          .filter(m => m.matched)
+          .map(m => ({
+            element: m.element,
+            field: m.field!,
+            matched: true
+          }));
+        
+        onFieldsMatched(matchedFields);
+      }
+      
+      // Force a re-render to ensure UI updates
+      setForceUpdate(prev => prev + 1);
+    }
+    
+    // Set the auto-match results
+    setAutoMatchResults({ count: matchCount, timestamp: Date.now() });
+    
+    return matchCount;
+  };
+  
+  // Get unmatched fields
+  const getUnmatchedFields = () => {
+    // More thorough check for matched fields using common identifiers
+    return extractedFields.filter(field => {
+      const fieldIdentifiers = [
+        field.id,
+        field.name,
+        field.label
+      ].filter(Boolean); // Remove undefined/null values
+      
+      // Check if any of our matched elements has this field
+      return !matchedElements.some(match => {
+        if (!match.matched || !match.field) return false;
+        
+        const matchFieldIdentifiers = [
+          match.field.id,
+          match.field.name,
+          match.field.label
+        ].filter(Boolean);
+        
+        // Check for any intersection between the identifiers
+        return fieldIdentifiers.some(id => 
+          matchFieldIdentifiers.includes(id)
+        );
+      });
+    });
+  };
+  
+  // Manually match a field to an element
+  const matchFieldToElement = (elementId: string, field: ExtractedField) => {
+    setMatchedElements(prev => {
+      const updated = prev.map(match => {
+        if (match.element.id === elementId) {
+          return {
+            ...match,
+            field,
+            matched: true
+          };
+        }
+        return match;
+      });
+      
+      // Notify parent of updated matches after updating state
+      if (onFieldsMatched) {
+        const matchedFields = updated
+          .filter(m => m.matched)
+          .map(m => ({
+            element: m.element,
+            field: m.field!,
+            matched: true
+          }));
+        
+        onFieldsMatched(matchedFields);
+      }
+      
+      return updated;
+    });
+    
+    // Force a re-render to ensure UI updates
+    setForceUpdate(prev => prev + 1);
+  };
+  
+  // Remove a match
+  const removeMatch = (elementId: string) => {
+    setMatchedElements(prev => {
+      const updated = prev.map(match => {
+        if (match.element.id === elementId) {
+          return {
+            ...match,
+            field: null,
+            matched: false
+          };
+        }
+        return match;
+      });
+      
+      // Notify parent of updated matches after updating state
+      if (onFieldsMatched) {
+        const matchedFields = updated
+          .filter(m => m.matched)
+          .map(m => ({
+            element: m.element,
+            field: m.field!,
+            matched: true
+          }));
+        
+        onFieldsMatched(matchedFields);
+      }
+      
+      return updated;
+    });
+    
+    // Force a re-render to ensure UI updates
+    setForceUpdate(prev => prev + 1);
+  };
+  
+  // Toggle element redaction
+  const toggleElementRedaction = (element: DocumentElement, field: ExtractedField | null) => {
+    setRedactedElements(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(element.id)) {
+        newSet.delete(element.id);
+      } else {
+        newSet.add(element.id);
+      }
+      return newSet;
+    });
+    
+    // Notify parent of updated redacted items
+    updateRedactionItems();
+  };
+  
+  // Toggle field redaction
+  const toggleFieldRedaction = (field: ExtractedField) => {
+    const fieldId = field.id || field.name || field.label || '';
+    if (!fieldId) return;
+    
+    setRedactedFields(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fieldId)) {
+        newSet.delete(fieldId);
+      } else {
+        newSet.add(fieldId);
+      }
+      return newSet;
+    });
+    
+    // Notify parent of updated redacted items
+    updateRedactionItems();
+  };
+  
+  // Helper to update parent about redacted items
+  const updateRedactionItems = () => {
+    if (!onRedactionChanged) return;
+    
+    setTimeout(() => {
+      const redactedItems = [];
+      
+      // Add redacted elements
+      for (const elementId of Array.from(redactedElements)) {
+        const element = matchedElements.find(m => m.element.id === elementId);
+        if (element) {
+          redactedItems.push({
+            id: elementId,
+            type: 'element' as const,
+            name: element.element.name
+          });
+        }
+      }
+      
+      // Add redacted fields
+      for (const fieldId of Array.from(redactedFields)) {
+        const field = extractedFields.find(f => 
+          (f.id && f.id === fieldId) || f.name === fieldId || f.label === fieldId
+        );
+        if (field) {
+          redactedItems.push({
+            id: fieldId,
+            type: 'field' as const,
+            name: field.name || field.label || 'Unknown field'
+          });
+        }
+      }
+      
+      onRedactionChanged(redactedItems);
+    }, 0);
+  };
+  
+  // Check if element is selected for redaction
+  const isElementSelectedForRedaction = (elementId: string) => {
+    return redactedElements.has(elementId);
+  };
+  
+  // Check if field is selected for redaction
+  const isFieldSelectedForRedaction = (field: ExtractedField) => {
+    const fieldId = field.id || field.name || field.label || '';
+    return fieldId ? redactedFields.has(fieldId) : false;
+  };
+  
+  // Handle drag start event
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    
+    if (active.data.current?.type === 'field') {
+      setActiveDragItem(active.data.current as DragItem);
+    }
+  };
+  
+  // Handle drag end event - enhance to support dragging to unmatched fields container
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    setActiveDragItem(null);
+    
+    if (!over) return;
+    
+    const activeId = active.id;
+    const overId = over.id;
+    
+    if (activeId === overId) return;
+    
+    // Check if we're dropping onto an element
+    if (over.data.current?.type === 'element') {
+      const elementId = over.data.current.elementId;
+      const fieldId = active.data.current?.id;
+      
+      if (elementId && fieldId) {
+        const field = extractedFields.find(f => 
+          (f.id && f.id === fieldId) || 
+          (f.name && f.name === fieldId) || 
+          `field-${extractedFields.indexOf(f)}` === fieldId
+        );
+        
+        if (field) {
+          // We need to manually redraw after drag completes to ensure UI updates correctly
+          setTimeout(() => {
+            matchFieldToElement(elementId, field);
+          }, 0);
+        }
+      }
+    }
+    // Check if we're dropping into the unmatched fields container
+    else if (over.id === 'unmatched-fields-container') {
+      // No action needed, field is already unmatched
+      console.log('Field dropped back into unmatched container');
+    }
+  };
+  
+  // Lookup functions to help with debugging
+  const getDocumentTypeId = (type: string | undefined) => {
+    if (!type) return 'unknown';
+    return DOCUMENT_TYPE_MAP[type] || 'Not found in mapping';
+  };
+  
+  const getDocumentSubTypeId = (subType: string | undefined) => {
+    if (!subType) return 'none';
+    return DOCUMENT_SUBTYPE_MAP[subType] || 'Not found in mapping';
   };
 
   // Calculate matching statistics
@@ -171,15 +839,161 @@ const DocumentControl = ({
     requiredMatched: matchedElements.filter(m => m.element.required && m.matched).length,
   };
 
-  // Lookup functions to help with debugging
-  const getDocumentTypeId = (type: string | undefined) => {
-    if (!type) return 'unknown';
-    return DOCUMENT_TYPE_MAP[type] || 'Not found in mapping';
+  // Find bounding box for a field based on its value
+  const findBoundingBoxForField = (fieldValue: string): any | undefined => {
+    if (!textractData || !fieldValue) return undefined;
+    
+    try {
+      const blocks = textractData.Blocks || [];
+      console.log(`Searching for bounding box of "${fieldValue}" in ${blocks.length} blocks`);
+      
+      // First, look for an exact match
+      for (const block of blocks) {
+        if ((block.BlockType === 'LINE' || block.BlockType === 'WORD' || block.BlockType === 'KEY_VALUE_SET') && 
+            block.Text === fieldValue && 
+            block.Geometry?.BoundingBox) {
+          console.log(`Found exact match for "${fieldValue}"`);
+          return block.Geometry.BoundingBox;
+        }
+      }
+      
+      // If no exact match, try normalized matches (lowercase, no spaces, etc.)
+      const normalizedFieldValue = fieldValue.toLowerCase().replace(/\s+/g, '').trim();
+      for (const block of blocks) {
+        if (block.Text) {
+          const normalizedBlockText = block.Text.toLowerCase().replace(/\s+/g, '').trim();
+          if (normalizedBlockText === normalizedFieldValue && block.Geometry?.BoundingBox) {
+            console.log(`Found normalized match for "${fieldValue}" as "${block.Text}"`);
+            return block.Geometry.BoundingBox;
+          }
+        }
+      }
+      
+      // If still no match, try partial matches
+      for (const block of blocks) {
+        if (block.Text && 
+            (block.Text.includes(fieldValue) || fieldValue.includes(block.Text)) && 
+            block.Geometry?.BoundingBox) {
+          console.log(`Found partial match for "${fieldValue}" with "${block.Text}"`);
+          return block.Geometry.BoundingBox;
+        }
+      }
+      
+      // Try looking for each word in the field value
+      const words = fieldValue.split(/\s+/).filter(word => word.length > 3);
+      for (const word of words) {
+        for (const block of blocks) {
+          if (block.Text && 
+              block.Text.toLowerCase().includes(word.toLowerCase()) && 
+              block.Geometry?.BoundingBox) {
+            console.log(`Found word match for "${word}" in "${fieldValue}" with "${block.Text}"`);
+            return block.Geometry.BoundingBox;
+          }
+        }
+      }
+      
+      console.log(`Could not find any bounding box for "${fieldValue}"`);
+    } catch (error) {
+      console.error('Error finding bounding box:', error);
+    }
+    
+    return undefined;
   };
-  
-  const getDocumentSubTypeId = (subType: string | undefined) => {
-    if (!subType) return 'none';
-    return DOCUMENT_SUBTYPE_MAP[subType] || 'Not found in mapping';
+
+  // Handle applying redactions
+  const handleApplyRedactions = () => {
+    if (!onApplyRedactions) return;
+    
+    setIsApplyingRedactions(true);
+    console.log("Starting to collect redacted items");
+    
+    try {
+      const redactedItems: Array<{
+        id: string;
+        type: 'element' | 'field';
+        name: string;
+        value?: string;
+        boundingBox?: any;
+      }> = [];
+      
+      // Add redacted elements
+      for (const elementId of Array.from(redactedElements)) {
+        const matchData = matchedElements.find(m => m.element.id === elementId);
+        if (matchData) {
+          const { element, field } = matchData;
+          
+          console.log(`Processing redacted element: ${element.name}`);
+          
+          // Determine the best value to use for finding the text in the document
+          let valueForRedaction = field?.text || field?.value;
+          let boundingBox = undefined;
+          
+          if (valueForRedaction) {
+            // Try to find bounding box from Textract data
+            boundingBox = findBoundingBoxForField(valueForRedaction);
+            console.log(`Element ${element.name} has value "${valueForRedaction}" with bounding box:`, boundingBox);
+          } else {
+            // Try using the element name as a fallback
+            console.log(`No field value for ${element.name}, trying to use element name`);
+            boundingBox = findBoundingBoxForField(element.name);
+            
+            // Also try aliases if available
+            if (!boundingBox && element.aliases && element.aliases.length > 0) {
+              for (const alias of element.aliases) {
+                boundingBox = findBoundingBoxForField(alias);
+                if (boundingBox) {
+                  valueForRedaction = alias;
+                  console.log(`Found bounding box using alias "${alias}"`);
+                  break;
+                }
+              }
+            }
+          }
+          
+          redactedItems.push({
+            id: element.id,
+            type: 'element',
+            name: element.name,
+            value: valueForRedaction,
+            boundingBox: boundingBox
+          });
+        }
+      }
+      
+      // Add redacted fields
+      for (const fieldId of Array.from(redactedFields)) {
+        const field = extractedFields.find(f => f.id === fieldId);
+        if (field) {
+          console.log(`Processing redacted field: ${field.label || field.id}`);
+          
+          // Use text or value property, whichever is available
+          const valueForRedaction = field.text || field.value;
+          let boundingBox = undefined;
+          
+          if (valueForRedaction) {
+            boundingBox = findBoundingBoxForField(valueForRedaction);
+            console.log(`Field ${field.label || field.id} has value "${valueForRedaction}" with bounding box:`, boundingBox);
+          }
+          
+          redactedItems.push({
+            id: field.id || fieldId,
+            type: 'field',
+            name: field.label || field.id || 'Unknown field',
+            value: valueForRedaction,
+            boundingBox: boundingBox
+          });
+        }
+      }
+      
+      console.log(`Collected ${redactedItems.length} redacted items to apply:`, redactedItems);
+      
+      // Call the callback with redacted items
+      onApplyRedactions(redactedItems);
+    } catch (error) {
+      console.error('Error applying redactions:', error);
+    } finally {
+      setIsApplyingRedactions(false);
+    }
   };
 
   return (
@@ -285,8 +1099,11 @@ const DocumentControl = ({
               </div>
             </div>
           ) : (
-            <>
-              {/* Matching statistics */}
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
               <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
@@ -318,7 +1135,7 @@ const DocumentControl = ({
                 </div>
                 <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {extractedFields.length - matchStats.matched}
+                    {getUnmatchedFields().length}
                   </div>
                   <div className="text-xs text-gray-600 dark:text-gray-400">
                     Unmatched Fields
@@ -326,152 +1143,233 @@ const DocumentControl = ({
                 </div>
               </div>
               
+              <div className="mb-4 flex justify-between items-center">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Redaction Controls
+                  </h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Select elements to redact, then apply redactions
+                  </p>
+                </div>
+                <button
+                  onClick={handleApplyRedactions}
+                  disabled={isApplyingRedactions || (redactedElements.size === 0 && redactedFields.size === 0)}
+                  className={`flex items-center px-4 py-2 rounded-md transition-colors ${
+                    redactedElements.size > 0 || redactedFields.size > 0
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+                  }`}
+                >
+                  {isApplyingRedactions ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Applying...
+                    </>
+                  ) : (
+                    <>
+                      <MdHideImage className="mr-2 h-4 w-4" />
+                      Apply Redactions
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {(redactedElements.size > 0 || redactedFields.size > 0) && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-md">
+                  <h4 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
+                    Selected for Redaction:
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(redactedElements).map(elementId => {
+                      const element = matchedElements.find(m => m.element.id === elementId)?.element;
+                      if (!element) return null;
+                      return (
+                        <span key={elementId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                          {element.name}
+                          <button 
+                            onClick={() => toggleElementRedaction(element, null)} 
+                            className="ml-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            <MdClose className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {Array.from(redactedFields).map(fieldId => {
+                      const field = extractedFields.find(f => 
+                        (f.id && f.id === fieldId) || f.name === fieldId || f.label === fieldId
+                      );
+                      if (!field) return null;
+                      const fieldName = field.name || field.label || 'Unknown field';
+                      return (
+                        <span key={fieldId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                          {fieldName}
+                          <button 
+                            onClick={() => toggleFieldRedaction(field)} 
+                            className="ml-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            <MdClose className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              
               <div className="overflow-hidden">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
-                      Required Data Elements
-                    </h4>
-                    <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[350px] overflow-y-auto">
-                      <div className="grid grid-cols-1 gap-2">
-                        {matchedElements
-                          .filter(match => match.element.required)
-                          .map((match, index) => (
-                            <div 
-                              key={match.element.id || index}
-                              className={`flex items-center justify-between p-2 rounded-md ${match.matched 
-                                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30' 
-                                : 'bg-white dark:bg-navy-800 border border-gray-200 dark:border-navy-600'}`}
-                            >
-                              <div className="flex items-center">
-                                {match.matched ? (
-                                  <MdCheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mr-2" />
-                                ) : (
-                                  <MdWarning className="w-5 h-5 text-red-500 flex-shrink-0 mr-2" />
-                                )}
-                                <span className="font-medium text-navy-700 dark:text-white text-sm">
-                                  {match.element.name}
-                                </span>
-                              </div>
-                              
-                              {match.matched && match.field && (
-                                <div className="flex items-center text-sm">
-                                  <span className={`mr-2 ${getConfidenceColor(match.confidence)} text-xs`}>
-                                    {match.confidence ? `${(match.confidence * 100).toFixed(0)}%` : ''}
-                                  </span>
-                                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 max-w-[150px] truncate">
-                                    {match.field.value || match.field.text || 'No value'}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              {!match.matched && (
-                                <span className="text-xs text-red-500">Missing</span>
-                              )}
-                            </div>
-                          ))}
+                    {/* Unmatched extracted fields - now in the left column */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Unmatched Extracted Fields
+                        </h4>
+                        {autoMatchResults && autoMatchResults.timestamp > Date.now() - 5000 && (
+                          <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
+                            autoMatchResults.count > 0 
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                          }`}>
+                            {autoMatchResults.count > 0 
+                              ? `Auto-matched ${autoMatchResults.count} field${autoMatchResults.count > 1 ? 's' : ''}!`
+                              : 'No matches found'}
+                          </span>
+                        )}
                       </div>
-                      
-                      {matchedElements.filter(match => match.element.required).length === 0 && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
-                          No required elements configured
+                      <div className="flex items-center">
+                        <button
+                          onClick={autoMatchFields}
+                          className="flex items-center mr-3 px-3 py-1 text-xs font-medium rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
+                        >
+                          <BsLightningCharge className="mr-1" />
+                          Auto-Match
+                        </button>
+                        <p className="text-xs text-indigo-600 dark:text-indigo-400">
+                          Drag fields to match
+                        </p>
+                      </div>
+                    </div>
+                    <div 
+                      id="unmatched-fields-container"
+                      className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[550px] overflow-y-auto"
+                    >
+                      {getUnmatchedFields().length > 0 ? (
+                        <div className="grid grid-cols-1 gap-2">
+                          {getUnmatchedFields().map((field, index) => (
+                            <DraggableField 
+                              key={field.id || field.name || `drag-${index}`}
+                              field={field}
+                              index={index}
+                              isSelected={isFieldSelectedForRedaction(field)}
+                              onSelectForRedaction={toggleFieldRedaction}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 p-3 text-center">
+                          All fields have been matched
                         </p>
                       )}
                     </div>
                   </div>
                   
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
-                      Optional Data Elements
-                    </h4>
-                    <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[350px] overflow-y-auto">
-                      <div className="grid grid-cols-1 gap-2">
-                        {matchedElements
-                          .filter(match => !match.element.required)
-                          .map((match, index) => (
-                            <div 
-                              key={match.element.id || index}
-                              className={`flex items-center justify-between p-2 rounded-md ${match.matched 
-                                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30' 
-                                : 'bg-white dark:bg-navy-800 border border-gray-200 dark:border-navy-600'}`}
-                            >
-                              <div className="flex items-center">
-                                {match.matched ? (
-                                  <MdCheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mr-2" />
-                                ) : (
-                                  <span className="w-5 h-5 flex-shrink-0 mr-2"></span>
-                                )}
-                                <span className="font-medium text-navy-700 dark:text-white text-sm">
-                                  {match.element.name}
-                                </span>
-                              </div>
-                              
-                              {match.matched && match.field && (
-                                <div className="flex items-center text-sm">
-                                  <span className={`mr-2 ${getConfidenceColor(match.confidence)} text-xs`}>
-                                    {match.confidence ? `${(match.confidence * 100).toFixed(0)}%` : ''}
-                                  </span>
-                                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 max-w-[150px] truncate">
-                                    {match.field.value || match.field.text || 'No value'}
-                                  </span>
-                                </div>
-                              )}
-                              
-                              {!match.matched && (
-                                <span className="text-xs text-gray-400">Not found</span>
-                              )}
-                            </div>
-                          ))}
-                      </div>
-                      
-                      {matchedElements.filter(match => !match.element.required).length === 0 && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
-                          No optional elements configured
+                  <div className="flex flex-col gap-4">
+                    {/* Required Data Elements - now in the right column, top */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Required Data Elements
+                        </h4>
+                        <p className="text-xs text-indigo-600 dark:text-indigo-400">
+                          Drop fields here
                         </p>
-                      )}
+                      </div>
+                      <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                        <div className="grid grid-cols-1 gap-2">
+                          {matchedElements
+                            .filter(match => match.element.required)
+                            .map((match, index) => (
+                              <DroppableElement
+                                key={match.element.id || `req-${index}`}
+                                match={match}
+                                index={index}
+                                onRemoveMatch={removeMatch}
+                                isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
+                                onSelectForRedaction={toggleElementRedaction}
+                              />
+                            ))}
+                        </div>
+                        
+                        {matchedElements.filter(match => match.element.required).length === 0 && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
+                            No required elements configured
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Optional Data Elements - now in the right column, bottom */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                          Optional Data Elements
+                        </h4>
+                        <p className="text-xs text-indigo-600 dark:text-indigo-400">
+                          Drop fields here
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                        <div className="grid grid-cols-1 gap-2">
+                          {matchedElements
+                            .filter(match => !match.element.required)
+                            .map((match, index) => (
+                              <DroppableElement
+                                key={match.element.id || `opt-${index}`}
+                                match={match}
+                                index={index}
+                                onRemoveMatch={removeMatch}
+                                isSelectedForRedaction={isElementSelectedForRedaction(match.element.id)}
+                                onSelectForRedaction={toggleElementRedaction}
+                              />
+                            ))}
+                        </div>
+                        
+                        {matchedElements.filter(match => !match.element.required).length === 0 && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 p-3">
+                            No optional elements configured
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-                
-                {/* Section for unmatched extracted fields */}
-                {extractedFields.length > matchStats.matched && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
-                      Unmatched Extracted Fields
-                    </h4>
-                    <div className="bg-gray-50 dark:bg-navy-700 rounded-lg p-3 max-h-[200px] overflow-y-auto">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {extractedFields.filter(field => 
-                          !matchedElements.some(match => 
-                            match.matched && match.field && 
-                            (match.field.id === field.id || 
-                             match.field.name === field.name || 
-                             match.field.label === field.label)
-                          )
-                        ).map((field, index) => (
-                          <div 
-                            key={field.id || index}
-                            className="p-2 border border-gray-200 dark:border-navy-600 rounded-md bg-white dark:bg-navy-800"
-                          >
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="font-medium text-sm text-navy-700 dark:text-white">
-                                {field.name || field.label || `Field ${index + 1}`}
-                              </span>
-                              <span className={`text-xs ${getConfidenceColor(field.confidence)}`}>
-                                {field.confidence ? `${(field.confidence * 100).toFixed(1)}%` : ''}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                              {field.value || field.text || 'No value'}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
-            </>
+              
+              {typeof document !== 'undefined' && createPortal(
+                <DragOverlay>
+                  {activeDragItem && (
+                    <div className="p-2 border border-indigo-400 dark:border-indigo-600 rounded-md bg-white dark:bg-navy-800 shadow-lg">
+                      <div className="flex items-center mb-1">
+                        <MdDragIndicator className="w-4 h-4 text-indigo-500 mr-2 flex-shrink-0" />
+                        <span className="font-medium text-sm text-navy-700 dark:text-white">
+                          {activeDragItem.field.name || activeDragItem.field.label || 'Field'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 truncate pl-6">
+                        {activeDragItem.field.value || activeDragItem.field.text || 'No value'}
+                      </p>
+                    </div>
+                  )}
+                </DragOverlay>,
+                document.body
+              )}
+            </DndContext>
           )}
         </div>
       )}
