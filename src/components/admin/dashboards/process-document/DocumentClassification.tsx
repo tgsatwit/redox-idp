@@ -6,6 +6,7 @@ import { MdError } from 'react-icons/md';
 import ClickablePillLabel from '@/components/admin/main/others/pill-labels/ClickablePillLabel';
 import DocumentViewer from './DocumentViewer';
 import Switch from '@/components/switch';
+import { ClassificationResult } from '@/lib/types';
 
 interface DocumentType {
   id: string;
@@ -451,7 +452,7 @@ const DocumentClassification = ({
   };
   
   // Function to handle manual classification
-  const applyManualClassification = () => {
+  const applyManualClassification = async () => {
     const classification = {
       type: documentType,
       subType: documentSubType,
@@ -459,7 +460,47 @@ const DocumentClassification = ({
       source: 'Manual'
     };
     
+    // Update local UI state
     updateClassification(classification);
+    
+    // Submit feedback to train model
+    try {
+      // If file exists, use its name as documentId
+      const documentId = file?.name || 'unknown_document';
+      
+      // Get the original classification from analysis results if it exists
+      const originalClassification: ClassificationResult | null = analysisResults.classification 
+        ? {
+            documentType: analysisResults.classification.type,
+            confidence: analysisResults.classification.confidence
+          }
+        : null;
+      
+      // Send the feedback to the API
+      const response = await fetch('/api/train-models/classification-feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          documentId,
+          originalClassification,
+          correctedDocumentType: documentType,
+          documentSubType,
+          feedbackSource: 'manual',
+          timestamp: Date.now()
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Classification feedback submission failed:', errorData);
+      } else {
+        console.log('Classification feedback submitted successfully');
+      }
+    } catch (error) {
+      console.error('Error submitting classification feedback:', error);
+    }
   };
   
   // Replace the documentTypeOptions and getSubTypeOptions with the fetched data

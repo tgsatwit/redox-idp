@@ -140,6 +140,31 @@ export interface ClassificationFeedback {
   feedbackSource: 'auto' | 'manual' | 'review'
   timestamp: number
   hasBeenUsedForTraining: boolean
+  status: 'pending' | 'reviewed' | 'corrected'
+  notes?: string
+  updatedAt?: number
+  updatedBy?: string
+}
+
+export interface FeedbackAuditLog {
+  id: string
+  feedbackId: string
+  documentId: string
+  timestamp: number
+  modifiedBy: string
+  changes: {
+    field: string
+    oldValue: any
+    newValue: any
+  }[]
+}
+
+export interface ModelTrainingConfig {
+  autoTrainingEnabled: boolean
+  feedbackThreshold: number
+  pendingFeedbackCount: number
+  lastTrainingDate?: number
+  modelStatus?: 'IDLE' | 'TRAINING' | 'FAILED'
 }
 
 export interface TrainingExample {

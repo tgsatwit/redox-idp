@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { FiPlus, FiSettings, FiTrash2, FiEdit } from "react-icons/fi";
-import { createId } from "@paralleldrive/cuid2";
 import { toast as showToast } from "./toast";
 import type { IconType } from 'react-icons';
 

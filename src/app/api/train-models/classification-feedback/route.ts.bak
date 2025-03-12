@@ -1,0 +1,147 @@
+import { NextResponse } from 'next/server';
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { v4 as uuidv4 } from 'uuid';
+import { ClassificationFeedback, ClassificationResult } from '@/lib/types';
+import { marshall } from '@aws-sdk/util-dynamodb';
+
+// Configure AWS DynamoDB with proper credentials
+const getDynamoDBConfig = () => {
+  // Environment variables to check (in order of priority)
+  const accessKeyOptions = [
+    process.env.AWS_ACCESS_KEY_ID,
+    process.env.APP_ACCESS_KEY_ID
+  ];
+  
+  const secretKeyOptions = [
+    process.env.AWS_SECRET_ACCESS_KEY,
+    process.env.APP_SECRET_ACCESS_KEY
+  ];
+  
+  const regionOptions = [
+    process.env.AWS_REGION,
+    process.env.APP_REGION,
+    'us-east-1'  // Default fallback region
+  ];
+  
+  // Find the first non-empty value
+  const accessKeyId = accessKeyOptions.find(key => key && key.trim());
+  const secretAccessKey = secretKeyOptions.find(key => key && key.trim());
+  const region = regionOptions.find(r => r && r.trim()) || 'us-east-1';
+  
+  console.log(`Using AWS DynamoDB in region: ${region}`);
+  
+  const config: any = { region };
+  
+  // Only add credentials if explicitly provided in environment variables
+  if (accessKeyId && secretAccessKey) {
+    config.credentials = {
+      accessKeyId,
+      secretAccessKey
+    };
+  }
+  
+  return config;
+};
+
+// In-memory storage for fallback (when DynamoDB has issues)
+const inMemoryFeedback: ClassificationFeedback[] = [];
+
+interface FeedbackRequestBody {
+  documentId: string;
+  originalClassification: ClassificationResult | null;
+  correctedDocumentType: string | null;
+  documentSubType?: string;
+  feedbackSource: 'auto' | 'manual' | 'review';
+  timestamp: number;
+}
+
+export async function POST(request: Request) {
+  let requestBody: FeedbackRequestBody | null = null;
+  
+  try {
+    // Parse request body
+    requestBody = await request.json() as FeedbackRequestBody;
+    const { 
+      documentId, 
+      originalClassification, 
+      correctedDocumentType,
+      documentSubType,
+      feedbackSource = 'manual',
+      timestamp = Date.now() 
+    } = requestBody;
+    
+    // Validate required fields
+    if (!documentId) {
+      return NextResponse.json(
+        { error: "documentId is required" },
+        { status: 400 }
+      );
+    }
+    
+    // Create feedback item
+    const feedbackItem: ClassificationFeedback = {
+      id: uuidv4(),
+      documentId,
+      originalClassification,
+      correctedDocumentType,
+      documentSubType: documentSubType || 'General',
+      feedbackSource,
+      timestamp,
+      hasBeenUsedForTraining: false
+    };
+    
+    // Check for required environment variables
+    if (!process.env.DYNAMODB_CLASSIFICATION_FEEDBACK_TABLE) {
+      console.warn("Missing DYNAMODB_CLASSIFICATION_FEEDBACK_TABLE, storing feedback in memory only");
+      inMemoryFeedback.push(feedbackItem);
+      return NextResponse.json({
+        message: "Classification feedback stored in memory (no DynamoDB table configured)",
+        feedbackId: feedbackItem.id
+      });
+    }
+    
+    // Initialize DynamoDB client
+    const dynamoDb = new DynamoDBClient(getDynamoDBConfig());
+    
+    // Save feedback to DynamoDB
+    await dynamoDb.send(
+      new PutItemCommand({
+        TableName: process.env.DYNAMODB_CLASSIFICATION_FEEDBACK_TABLE,
+        Item: marshall(feedbackItem)
+      })
+    );
+    
+    // Return success
+    return NextResponse.json({
+      message: "Classification feedback submitted successfully",
+      feedbackId: feedbackItem.id
+    });
+  } catch (error) {
+    console.error("Error submitting classification feedback:", error);
+    
+    // If there's an error with DynamoDB, store the feedback in memory as fallback
+    if (requestBody) {
+      try {
+        const feedbackItem: ClassificationFeedback = {
+          id: uuidv4(),
+          documentId: requestBody.documentId,
+          originalClassification: requestBody.originalClassification,
+          correctedDocumentType: requestBody.correctedDocumentType,
+          documentSubType: requestBody.documentSubType || 'General',
+          feedbackSource: requestBody.feedbackSource || 'manual',
+          timestamp: requestBody.timestamp || Date.now(),
+          hasBeenUsedForTraining: false
+        };
+        inMemoryFeedback.push(feedbackItem);
+        console.log("Stored feedback in memory as fallback");
+      } catch (fallbackError) {
+        console.error("Failed to store feedback in memory:", fallbackError);
+      }
+    }
+    
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unknown error occurred" },
+      { status: 500 }
+    );
+  }
+} 

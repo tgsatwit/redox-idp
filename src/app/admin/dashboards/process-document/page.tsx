@@ -4,6 +4,7 @@ import DocumentUpload from '@/components/admin/dashboards/process-document/Docum
 import DocumentViewer from '@/components/admin/dashboards/process-document/DocumentViewer';
 import DocumentWorkflowStepper from '@/components/admin/dashboards/process-document/DocumentWorkflowStepper';
 import DocumentClassification from '@/components/admin/dashboards/process-document/DocumentClassification';
+import DocumentControl from '@/components/admin/dashboards/process-document/DocumentControl';
 import Card from '@/components/card';
 import WorkflowStepperCard from '@/components/admin/dashboards/process-document/WorkflowStepperCard';
 import { 
@@ -984,6 +985,22 @@ const ProcessDocument = () => {
                   setScanForTFN={setScanForTFN}
                 />
               </Card>
+            )}
+            
+            {/* Document Control component - only show when classification is complete and we're on step 3 or later */}
+            {selectedFile && analysisResults.classification && currentStep >= 3 && (
+              <div className="mb-6">
+                <DocumentControl
+                  documentType={analysisResults.classification.type}
+                  documentSubType={analysisResults.classification.subType}
+                  extractedFields={analysisResults.extractedFields}
+                  isLoading={isAnalysing}
+                  onFieldsMatched={(matchedFields) => {
+                    console.log('Matched fields:', matchedFields);
+                    // You can store and use the matched fields data here
+                  }}
+                />
+              </div>
             )}
             
             {/* Document viewer - This is the only place where the document viewer should be */}
