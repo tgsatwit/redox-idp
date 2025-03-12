@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import Card from '@/components/card';
-import { MdSync, MdError, MdWarning, MdCheckCircle, MdContentCopy, MdSettings, MdInfo, MdStorage, MdDragIndicator, MdAutorenew, MdClose, MdHideImage } from 'react-icons/md';
+import { MdSync, MdError, MdWarning, MdCheckCircle, MdContentCopy, MdSettings, MdInfo, MdStorage, MdDragIndicator, MdAutorenew, MdClose, MdHideImage, MdNavigateNext, MdNavigateBefore } from 'react-icons/md';
 import { BsCheckCircle, BsLightningCharge } from 'react-icons/bs';
+import { FiSearch } from 'react-icons/fi';
 import { 
   DndContext, 
   DragEndEvent,
@@ -298,6 +299,11 @@ const DocumentControl = ({
   
   // New state for removed required elements
   const [removedRequiredElements, setRemovedRequiredElements] = useState<Set<string>>(new Set());
+  
+  // New state for search and pagination of unmatched fields
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5; // Show 5 items per page
   
   // Setup sensors for drag and drop
   const sensors = useSensors(
@@ -624,6 +630,48 @@ const DocumentControl = ({
       });
     });
   };
+  
+  // Get filtered unmatched fields based on search query
+  const getFilteredUnmatchedFields = () => {
+    const unmatchedFields = getUnmatchedFields();
+    
+    if (!searchQuery.trim()) {
+      return unmatchedFields;
+    }
+    
+    const query = searchQuery.toLowerCase().trim();
+    return unmatchedFields.filter(field => {
+      const fieldName = (field.name || field.label || '').toLowerCase();
+      const fieldValue = (field.value || field.text || '').toLowerCase();
+      
+      return fieldName.includes(query) || fieldValue.includes(query);
+    });
+  };
+  
+  // Get paginated unmatched fields
+  const getPaginatedUnmatchedFields = () => {
+    const filteredFields = getFilteredUnmatchedFields();
+    const totalPages = Math.ceil(filteredFields.length / itemsPerPage);
+    
+    // Ensure current page is valid
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+    
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    
+    return {
+      fields: filteredFields.slice(startIndex, endIndex),
+      totalPages,
+      totalItems: filteredFields.length
+    };
+  };
+  
+  // Reset pagination when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
   
   // Manually match a field to an element
   const matchFieldToElement = (elementId: string, field: ExtractedField) => {
@@ -1177,7 +1225,7 @@ const DocumentControl = ({
               <div className="overflow-hidden">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    {/* Unmatched extracted fields - now in the left column */}
+                    {/* Unmatched extracted fields - updated with search and pagination */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center">
                         <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
@@ -1194,13 +1242,28 @@ const DocumentControl = ({
                         </button>
                       </div>
                     </div>
+                    
+                    {/* Search input for unmatched fields */}
+                    <div className="mb-3 flex h-10 w-full items-center rounded-full bg-lightPrimary text-navy-700 dark:bg-navy-900 dark:text-white">
+                      <span className="pl-3 pr-2 text-xl">
+                        <FiSearch className="h-4 w-4 text-gray-500 dark:text-gray-300" />
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Search fields..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="block h-full w-full rounded-full bg-lightPrimary text-sm font-medium text-navy-700 outline-none placeholder:!text-gray-400 dark:bg-navy-900 dark:text-white dark:placeholder:!text-gray-300 dark:border dark:border-navy-700"
+                      />
+                    </div>
+                    
                     <div 
                       id="unmatched-fields-container"
-                      className="rounded-lg p-3 max-h-[550px] overflow-y-auto"
+                      className="rounded-lg p-3"
                     >
-                      {getUnmatchedFields().length > 0 ? (
+                      {getPaginatedUnmatchedFields().totalItems > 0 ? (
                         <div className="grid grid-cols-1 gap-2">
-                          {getUnmatchedFields().map((field, index) => (
+                          {getPaginatedUnmatchedFields().fields.map((field, index) => (
                             <DraggableField 
                               key={field.id || field.name || `drag-${index}`}
                               field={field}
@@ -1212,8 +1275,33 @@ const DocumentControl = ({
                         </div>
                       ) : (
                         <p className="text-sm text-gray-500 dark:text-gray-400 p-3 text-center">
-                          All fields have been matched
+                          {searchQuery ? 'No fields match your search' : 'All fields have been matched'}
                         </p>
+                      )}
+                      
+                      {/* Pagination */}
+                      {getPaginatedUnmatchedFields().totalPages > 1 && (
+                        <div className="flex w-full items-center justify-center rounded-lg pt-4 px-2">
+                          <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-brand-500 dark:border-gray-700 dark:bg-navy-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <MdNavigateBefore className="h-4 w-4" />
+                          </button>
+                          <div className="mx-4 flex items-center text-sm text-navy-700 dark:text-white">
+                            <span className="font-bold">{currentPage}</span>
+                            <span className="mx-1">/</span>
+                            <span>{getPaginatedUnmatchedFields().totalPages}</span>
+                          </div>
+                          <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, getPaginatedUnmatchedFields().totalPages))}
+                            disabled={currentPage === getPaginatedUnmatchedFields().totalPages}
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-brand-500 dark:border-gray-700 dark:bg-navy-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <MdNavigateNext className="h-4 w-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1322,7 +1410,7 @@ const DocumentControl = ({
                             </span>
                           </h4>
                         </div>
-                        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+                        <div className="rounded-lg p-3 max-h-[250px] overflow-y-auto">
                           <div className="grid grid-cols-1 gap-2">
                             {matchedElements
                               .filter(match => match.element.required && removedRequiredElements.has(match.element.id))
