@@ -1,6 +1,6 @@
 import { useState } from 'react';
 // import { IoMdTrash } from "react-icons/io";
-import { Id, Task } from 'types/hui-types';
+import { Id, Task } from '@/types/hui-types';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { MdEdit, MdDeleteOutline } from 'react-icons/md';

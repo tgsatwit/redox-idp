@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle, ForwardRefRenderFunction } from 'react';
 import Card from '@/components/card';
 import { MdSync, MdError, MdWarning, MdCheckCircle, MdContentCopy, MdSettings, MdInfo, MdStorage, MdDragIndicator, MdAutorenew, MdClose, MdHideImage, MdNavigateNext, MdNavigateBefore } from 'react-icons/md';
 import { BsCheckCircle, BsLightningCharge, BsFillCheckCircleFill } from 'react-icons/bs';
@@ -82,6 +82,8 @@ interface DocumentControlProps {
   isLoading?: boolean;
   textractData?: any;
   onValidationChange?: (isValid: boolean) => void;
+  isExpanded?: boolean;
+  onExpandChange?: (expanded: boolean) => void;
 }
 
 // Drag item type definition
@@ -365,17 +367,35 @@ const DroppableCustomElement = ({
   );
 };
 
-const DocumentControl = ({
-  documentType,
-  documentSubType,
-  extractedFields = [],
-  onFieldsMatched,
-  onRedactionChanged,
-  onApplyRedactions,
-  isLoading = false,
-  textractData,
-  onValidationChange
-}: DocumentControlProps) => {
+// Define interface for the exposed methods
+export interface DocumentControlHandle {
+  autoMatchFields: () => number;
+  handleApplyRedactions: () => Array<{
+    id: string;
+    type: 'element' | 'field';
+    name: string;
+    value?: string;
+    boundingBox?: any;
+  }>;
+}
+
+// Convert to ForwardRefRenderFunction
+const DocumentControl: ForwardRefRenderFunction<DocumentControlHandle, DocumentControlProps> = (
+  {
+    documentType,
+    documentSubType,
+    extractedFields = [],
+    onFieldsMatched,
+    onRedactionChanged,
+    onApplyRedactions,
+    isLoading = false,
+    textractData,
+    onValidationChange,
+    isExpanded: externalIsExpanded,
+    onExpandChange
+  },
+  ref
+) => {
   const [documentElements, setDocumentElements] = useState<DocumentElement[]>([]);
   const [isLoadingElements, setIsLoadingElements] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -384,8 +404,20 @@ const DocumentControl = ({
     field: ExtractedField | null;
     matched: boolean;
   }>>([]);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [internalIsExpanded, setInternalIsExpanded] = useState(true);
   const [fetchAttempted, setFetchAttempted] = useState(false);
+  
+  // Use external or internal state based on whether props are provided
+  const isExpanded = externalIsExpanded !== undefined ? externalIsExpanded : internalIsExpanded;
+  
+  // Toggle function that updates the appropriate state
+  const toggleExpanded = () => {
+    if (onExpandChange) {
+      onExpandChange(!isExpanded);
+    } else {
+      setInternalIsExpanded(!isExpanded);
+    }
+  };
   
   // State for drag and drop
   const [activeDragItem, setActiveDragItem] = useState<DragItem | null>(null);
@@ -400,6 +432,7 @@ const DocumentControl = ({
   
   // New state for redaction process
   const [isApplyingRedactions, setIsApplyingRedactions] = useState(false);
+  const [redactionsApplied, setRedactionsApplied] = useState(false);
   
   // New state for removed required elements
   const [removedRequiredElements, setRemovedRequiredElements] = useState<Set<string>>(new Set());
@@ -447,9 +480,6 @@ const DocumentControl = ({
         
         // The responseData should be an array of elements
         setDocumentElements(Array.isArray(responseData) ? responseData : []);
-        
-        // Match elements with extracted fields
-        matchElementsWithFields(Array.isArray(responseData) ? responseData : []);
       } catch (error) {
         console.error('Error fetching document elements:', error);
         setError(error instanceof Error ? error.message : 'Unknown error');
@@ -459,8 +489,27 @@ const DocumentControl = ({
     };
     
     fetchDocumentElements();
-  }, [documentType, documentSubType, extractedFields]);
-  
+  }, [documentType, documentSubType]);
+
+  // Separate useEffect to handle matching elements with fields whenever either changes
+  useEffect(() => {
+    // Only run matching if we have both document elements and extracted fields
+    if (documentElements.length > 0 && extractedFields.length > 0) {
+      // Create a stable reference to the current state to avoid continuous loops
+      const currentElements = [...documentElements];
+      const currentFields = [...extractedFields];
+      
+      // Use a ref to track if this is the first run to avoid continuous loops
+      const isFirstRun = !matchedElements.some(m => m.matched);
+      
+      // Only run matching if we don't have matches yet or if explicitly needed
+      if (isFirstRun) {
+        matchElementsWithFields(currentElements);
+      }
+    }
+  }, [documentElements, extractedFields]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Intentionally omitting matchedElements from dependencies to break the loop
+
   // Function to check if an element requires mandatory redaction
   const requiresRedaction = (element: DocumentElement): boolean => {
     return element.action.toLowerCase().includes('redact');
@@ -476,6 +525,17 @@ const DocumentControl = ({
       })));
       return;
     }
+    
+    // Check if we already have matches - if so, avoid unnecessary re-matching
+    const hasExistingMatches = matchedElements.some(m => m.matched);
+    if (hasExistingMatches && matchedElements.length === elements.length) {
+      // We already have matched elements, so no need to re-match
+      console.log('Skipping re-matching as matches already exist');
+      return;
+    }
+    
+    // Collect elements that need redaction
+    const elementsToRedact = new Set<string>();
     
     const matches = elements.map(element => {
       // Try to find a match in extracted fields based on name or aliases
@@ -495,12 +555,8 @@ const DocumentControl = ({
       
       // Check if this element requires redaction based on its action
       if (requiresRedaction(element) && matchedField) {
-        // Automatically add to redacted elements
-        setRedactedElements(prev => {
-          const newSet = new Set(prev);
-          newSet.add(element.id);
-          return newSet;
-        });
+        // Add to collection instead of updating state directly
+        elementsToRedact.add(element.id);
       }
       
       return {
@@ -510,21 +566,38 @@ const DocumentControl = ({
       };
     });
     
+    // Batch state updates
     setMatchedElements(matches);
     
-    // Notify parent component of matched fields
-    if (onFieldsMatched) {
+    // Only update redacted elements if we found any
+    if (elementsToRedact.size > 0) {
+      setRedactedElements(prev => {
+        const newSet = new Set(prev);
+        elementsToRedact.forEach(id => newSet.add(id));
+        return newSet;
+      });
+    
+      // Notify parent component of matched fields
+      if (onFieldsMatched) {
+        onFieldsMatched(matches.filter(m => m.matched).map(m => ({
+          element: m.element,
+          field: m.field!,
+          matched: m.matched
+        })));
+      }
+      
+      // Only update redacted items if we actually changed something
+      setTimeout(() => {
+        updateRedactionItems();
+      }, 50); // Slight delay to ensure state updates are processed
+    } else if (matches.some(m => m.matched) && onFieldsMatched) {
+      // Still notify about matches even if no redactions
       onFieldsMatched(matches.filter(m => m.matched).map(m => ({
         element: m.element,
         field: m.field!,
         matched: m.matched
       })));
     }
-    
-    // Update redacted items list after auto-redaction
-    setTimeout(() => {
-      updateRedactionItems();
-    }, 0);
   };
   
   // Function to automatically match unmatched fields to elements
@@ -956,6 +1029,11 @@ const DocumentControl = ({
   const updateRedactionItems = () => {
     if (!onRedactionChanged) return;
     
+    // Prevent excessive updates by checking if we're mounting or if real changes happened
+    const redactedElementsCount = redactedElements.size;
+    const redactedFieldsCount = redactedFields.size;
+    
+    // Use a more stable approach to update
     setTimeout(() => {
       const redactedItems = [];
       
@@ -987,7 +1065,12 @@ const DocumentControl = ({
         }
       }
       
-      onRedactionChanged(redactedItems);
+      // Only call the callback if we have redacted items or if the counts have changed
+      if (redactedItems.length > 0 || 
+          redactedElementsCount > 0 || 
+          redactedFieldsCount > 0) {
+        onRedactionChanged(redactedItems);
+      }
     }, 0);
   };
   
@@ -1164,7 +1247,7 @@ const DocumentControl = ({
 
   // Handle applying redactions
   const handleApplyRedactions = () => {
-    if (!onApplyRedactions) return;
+    if (!onApplyRedactions) return [];
     
     setIsApplyingRedactions(true);
     console.log("Starting to collect redacted items");
@@ -1202,18 +1285,6 @@ const DocumentControl = ({
           // Try using the element name as a fallback
           console.log(`No field value for ${element.name}, trying to use element name`);
           boundingBox = findBoundingBoxForField(element.name);
-          
-          // Also try aliases if available
-          if (!boundingBox && element.aliases && element.aliases.length > 0) {
-            for (const alias of element.aliases) {
-              boundingBox = findBoundingBoxForField(alias);
-              if (boundingBox) {
-                valueForRedaction = alias;
-                console.log(`Found bounding box using alias "${alias}"`);
-                break;
-              }
-            }
-          }
         }
         
         redactedItems.push({
@@ -1221,43 +1292,49 @@ const DocumentControl = ({
           type: 'element',
           name: element.name,
           value: valueForRedaction,
-          boundingBox: boundingBox
+          boundingBox
         });
       }
       
-      // Add redacted fields
-      for (const fieldId of Array.from(redactedFields)) {
+      // Process all standalone fields marked for redaction
+      // Convert Set to Array before iterating
+      Array.from(redactedFields).forEach(fieldId => {
         const field = extractedFields.find(f => f.id === fieldId);
-        if (field) {
-          console.log(`Processing redacted field: ${field.label || field.id}`);
-          
-          // Use text or value property, whichever is available
-          const valueForRedaction = field.text || field.value;
-          let boundingBox = undefined;
-          
-          if (valueForRedaction) {
-            boundingBox = findBoundingBoxForField(valueForRedaction);
-            console.log(`Field ${field.label || field.id} has value "${valueForRedaction}" with bounding box:`, boundingBox);
-          }
-          
-          redactedItems.push({
-            id: field.id || fieldId,
-            type: 'field',
-            name: field.label || field.id || 'Unknown field',
-            value: valueForRedaction,
-            boundingBox: boundingBox
-          });
+        if (!field) return;
+        
+        console.log(`Processing redacted field: ${field.name || field.text || field.value}`);
+        
+        // Try to find bounding box from Textract data
+        const valueForRedaction = field.text || field.value;
+        let boundingBox = undefined;
+        
+        if (valueForRedaction) {
+          boundingBox = findBoundingBoxForField(valueForRedaction);
+          console.log(`Field ${field.name || 'unnamed'} has value "${valueForRedaction}" with bounding box:`, boundingBox);
         }
-      }
+        
+        redactedItems.push({
+          id: field.id || `field-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          type: 'field',
+          name: field.name || field.label || 'Unnamed Field',
+          value: valueForRedaction,
+          boundingBox
+        });
+      });
       
-      console.log(`Collected ${redactedItems.length} redacted items to apply:`, redactedItems);
-      
-      // Call the callback with redacted items
+      // Call the parent component's callback with the redacted items
+      console.log(`Applying ${redactedItems.length} redactions`, redactedItems);
       onApplyRedactions(redactedItems);
+      
+      setIsApplyingRedactions(false);
+      setRedactionsApplied(true);
+      
+      // Return the redacted items so the parent component can use them directly
+      return redactedItems;
     } catch (error) {
       console.error('Error applying redactions:', error);
-    } finally {
       setIsApplyingRedactions(false);
+      return [];
     }
   };
 
@@ -1374,17 +1451,11 @@ const DocumentControl = ({
     return hasManualRedactions || hasRequiredRedactions;
   };
 
-  // Expose autoMatchFields to the window for external access
-  useEffect(() => {
-    // Only in browser environment
-    if (typeof window !== 'undefined') {
-      const controlElement = document.querySelector('[data-testid="document-control"]');
-      if (controlElement) {
-        (controlElement as any).autoMatchFields = autoMatchFields;
-        (controlElement as any).handleApplyRedactions = handleApplyRedactions;
-      }
-    }
-  }, [extractedFields, matchedElements, redactedElements, redactedFields]); // Dependencies that these functions need
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    autoMatchFields,
+    handleApplyRedactions
+  }));
 
   return (
     <Card extra="w-full p-6" data-testid="document-control">
@@ -1393,7 +1464,7 @@ const DocumentControl = ({
           {/* Inserted clickable pill label for required elements resolved status */}
           <div className="flex items-center gap-2">
           {matchStats.requiredTotal > 0 && (
-            <div className="my-4 dark:text-white">
+            <div className="dark:text-white">
               <ClickablePillLabel
                 label={
                   matchStats.requiredUnresolved === 0
@@ -1421,7 +1492,7 @@ const DocumentControl = ({
             </div>
           )}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={toggleExpanded}
             className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-navy-700"
           >
             {isExpanded ? (
@@ -1793,4 +1864,4 @@ const DocumentControl = ({
   );
 };
 
-export default DocumentControl; 
+export default forwardRef(DocumentControl); 

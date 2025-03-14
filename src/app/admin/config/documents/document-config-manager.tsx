@@ -142,54 +142,121 @@ const toast = ({ title, description, variant = 'default' }: { title: string; des
   // In a real implementation, you would call your actual toast function here
 };
 
-export default function DocumentConfigManager() {
+const DocumentConfigManager: React.FC = () => {
   const { 
-    loading, 
     documentTypes, 
-    selectedDocType, 
-    selectedSubType, 
-    activeTab, 
-    formMode,
+    loading: contextLoading,
+    selectedDocType,
+    selectedSubType,
     setSelectedDocType,
     setSelectedSubType,
+    activeTab, 
     setActiveTab,
-    setFormMode,
     fetchDocumentType,
-    createDocumentType,
-    updateDocumentType,
-    deleteDocumentType,
-    createSubType
+    fetchDocumentTypes
   } = useDocumentConfig();
+  
+  const [loading, setLoading] = useState(false);
 
   // Handle document type selection
   const handleDocTypeSelect = async (docType: DocumentTypeConfig) => {
-    const fullDocType = await fetchDocumentType(docType.id);
-    if (fullDocType) {
-      setSelectedDocType(fullDocType);
-      setActiveTab('sub-types');
+    console.log(`Selecting document type: ${docType.name} (${docType.id})`);
+    
+    // Set loading state to true to show a loading indicator
+    setLoading(true);
+    
+    // Set the selected document type immediately to provide instant feedback
+    setSelectedDocType(docType);
+    setActiveTab('document-details');
+    
+    try {
+      // Use fetchDocumentType to get complete data with error handling
+      console.log(`Fetching full details for document type: ${docType.id}`);
+      const fullDocType = await fetchDocumentType(docType.id);
+      
+      if (fullDocType) {
+        console.log(`Successfully fetched complete document type: ${fullDocType.name}`);
+        
+        // Make sure subtypes array exists
+        if (!fullDocType.subTypes) {
+          console.warn('Document type has no subTypes array, initializing empty array');
+          fullDocType.subTypes = [];
+        }
+        
+        // Make sure dataElements array exists
+        if (!fullDocType.dataElements) {
+          console.warn('Document type has no dataElements array, initializing empty array');
+          fullDocType.dataElements = [];
+        }
+        
+        // Log sub-types and data elements for debugging
+        console.log(`Document type has ${fullDocType.subTypes.length} sub-types`);
+        fullDocType.subTypes.forEach((subType, index) => {
+          console.log(`- Sub-type ${index + 1}: ${subType.name} (${subType.id})`);
+          
+          // Make sure dataElements array exists for each subtype
+          if (!subType.dataElements) {
+            console.warn(`Sub-type ${subType.id} has no dataElements array, initializing empty array`);
+            subType.dataElements = [];
+          }
+          
+          console.log(`  Has ${subType.dataElements.length} data elements`);
+          
+          if (subType.dataElements.length > 0) {
+            subType.dataElements.forEach((element, elemIndex) => {
+              console.log(`  - Element ${elemIndex + 1}: ${element.name}, Action: ${element.action}`);
+            });
+          }
+        });
+        
+        console.log(`Document type has ${fullDocType.dataElements.length} document-level data elements`);
+        if (fullDocType.dataElements.length > 0) {
+          fullDocType.dataElements.forEach((element, index) => {
+            console.log(`- Element ${index + 1}: ${element.name}, Action: ${element.action}`);
+          });
+        }
+        
+        // Update the selected document type with the complete data
+        setSelectedDocType(fullDocType);
+      } else {
+        console.warn(`Failed to fetch full document type data for ${docType.id}, using basic info`);
+        // No need to set selectedDocType again as we've already set it above
+      }
+    } catch (error) {
+      console.error(`Error fetching document type details: ${error}`);
+      // No need to update selectedDocType again as we've already set it above
+    } finally {
+      setLoading(false);
     }
   };
 
   // Handle sub-type selection
   const handleSubTypeSelect = (subType: DocumentSubTypeConfig) => {
-    setSelectedSubType(subType);
-    setActiveTab('data-elements');
+    // We need to set the selectedSubType in the context
+    if (selectedDocType) {
+      // Find the selected sub-type in the current document type
+      const foundSubType = selectedDocType.subTypes?.find(st => st.id === subType.id);
+      if (foundSubType) {
+        setSelectedSubType(foundSubType);
+        setActiveTab('data-elements');
+      }
+    }
   };
 
   // Handle add new item button click
   const handleAddNew = () => {
-    setFormMode('add');
+    setLoading(true);
   };
 
   // Handle edit item button click
   const handleEdit = (itemType: 'document-type' | 'sub-type' | 'data-element', item: any) => {
     // Set the appropriate item for editing
-    setFormMode('edit');
+    setLoading(true);
   };
 
   // Handle cancel form
   const handleCancelForm = () => {
-    setFormMode('none');
+    setLoading(false);
   };
 
   // Main content area (for the middle card)
@@ -227,27 +294,19 @@ export default function DocumentConfigManager() {
                 value="data-elements" 
                 active={activeTab}
                 onClick={() => setActiveTab('data-elements')}
-                disabled={!selectedSubType && !selectedDocType}
+                disabled={!selectedDocType}
               >
-                Data Elements {selectedSubType 
-                  ? `(${selectedSubType.name})` 
-                  : selectedDocType 
-                    ? `(${selectedDocType.name})` 
-                    : ''}
+                Data Elements {selectedDocType ? `(${selectedDocType.name})` : ''}
               </TabsTrigger>
             </TabsList>
             
-            {formMode === 'none' && selectedDocType && (
+            {activeTab === 'document-types' && (
               <Button 
                 onClick={handleAddNew} 
                 size="sm"
               >
                 <FiPlus className="mr-2" size={14} />
-                {activeTab === 'document-types' 
-                  ? 'Edit Document' 
-                  : activeTab === 'sub-types' 
-                    ? 'Add Sub-Type' 
-                    : 'Add Data Element'}
+                Add Document Type
               </Button>
             )}
           </div>
@@ -292,7 +351,7 @@ export default function DocumentConfigManager() {
                 </div>
                 <div className="flex justify-end mt-6">
                   <Button variant="outline" size="sm" onClick={() => {
-                    setFormMode('edit');
+                    setLoading(true);
                   }}>
                     <FiEdit className="mr-1" size={14} />
                     Edit Document Type
@@ -326,10 +385,10 @@ export default function DocumentConfigManager() {
             {(selectedDocType) && (
               <div className="p-4 bg-gray-50 dark:bg-navy-700/80 rounded-md">
                 <h3 className="font-medium text-lg mb-2 text-gray-900 dark:text-white">
-                  {selectedSubType ? selectedSubType.name : selectedDocType.name}
+                  {selectedDocType.name}
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400">
-                  {selectedSubType ? selectedSubType.description : selectedDocType.description || 'No description available'}
+                  {selectedDocType.description || 'No description available'}
                 </p>
                 {/* Data elements would be listed here */}
                 <div className="mt-4 text-center text-gray-500 dark:text-gray-400">
@@ -347,4 +406,6 @@ export default function DocumentConfigManager() {
   };
 
   return renderMainContent();
-} 
+}
+
+export default DocumentConfigManager; 

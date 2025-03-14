@@ -8,7 +8,9 @@ import type {
   TrainingDataset,
   TrainingExample,
   DocumentSubTypeConfig,
-  RetentionPolicy
+  RetentionPolicy,
+  StorageSolution,
+  RetentionStage
 } from './types'
 
 // Initialize app configuration with empty arrays instead of mock data
@@ -19,6 +21,7 @@ const initialConfig: AppConfig = {
     redactFinancial: true
   },
   retentionPolicies: [],
+  storageSolutions: [],
   promptCategories: []
 }
 
@@ -57,6 +60,17 @@ type ConfigState = {
   addRetentionPolicy: (policy: Omit<RetentionPolicy, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateRetentionPolicy: (id: string, updates: Partial<Omit<RetentionPolicy, 'id' | 'createdAt'>>) => void
   deleteRetentionPolicy: (id: string) => void
+  
+  // New function to replace all retention policies at once
+  setRetentionPolicies: (policies: RetentionPolicy[]) => void
+  
+  // Storage solution management
+  addStorageSolution: (solution: Partial<StorageSolution>) => void
+  updateStorageSolution: (id: string, updates: Partial<Omit<StorageSolution, 'id' | 'createdAt'>>) => void
+  deleteStorageSolution: (id: string) => void
+  
+  // New function to replace all storage solutions at once
+  setStorageSolutions: (solutions: StorageSolution[]) => void
   
   resetToDefaults: () => void
 }
@@ -418,43 +432,153 @@ export const useConfigStore = create<ConfigState>()(
       }),
       
       // Retention policy management
-      addRetentionPolicy: (policy) => set((state) => ({
-        config: {
-          ...state.config,
-          retentionPolicies: [
-            ...(state.config.retentionPolicies || []),
-            {
-              ...policy,
-              id: uuidv4(),
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            }
-          ]
-        }
-      })),
-
-      updateRetentionPolicy: (id, updates) => set((state) => ({
-        config: {
-          ...state.config,
-          retentionPolicies: (state.config.retentionPolicies || []).map(policy =>
-            policy.id === id
-              ? { ...policy, ...updates, updatedAt: Date.now() }
-              : policy
-          )
-        }
-      })),
-
+      addRetentionPolicy: (policy) => set((state) => {
+        const now = Date.now();
+        const newPolicy = {
+          ...policy,
+          id: uuidv4(),
+          createdAt: now,
+          updatedAt: now,
+          totalDuration: policy.stages.reduce((total, stage) => total + stage.duration, 0),
+          duration: policy.stages.reduce((total, stage) => total + stage.duration, 0) // For backward compatibility
+        };
+        
+        return {
+          config: {
+            ...state.config,
+            retentionPolicies: [...state.config.retentionPolicies, newPolicy]
+          }
+        };
+      }),
+      
+      updateRetentionPolicy: (id, updates) => set((state) => {
+        const now = Date.now();
+        return {
+          config: {
+            ...state.config,
+            retentionPolicies: state.config.retentionPolicies.map(policy => {
+              if (policy.id !== id) return policy;
+              
+              const updatedPolicy = {
+                ...policy,
+                ...updates,
+                updatedAt: now
+              };
+              
+              // Recalculate total duration if stages are updated
+              if (updates.stages) {
+                updatedPolicy.totalDuration = updates.stages.reduce((total, stage) => total + stage.duration, 0);
+                updatedPolicy.duration = updatedPolicy.totalDuration; // For backward compatibility
+              }
+              
+              return updatedPolicy;
+            })
+          }
+        };
+      }),
+      
       deleteRetentionPolicy: (id) => set((state) => ({
         config: {
           ...state.config,
-          retentionPolicies: (state.config.retentionPolicies || []).filter(policy => policy.id !== id)
+          retentionPolicies: state.config.retentionPolicies.filter(policy => policy.id !== id)
         }
       })),
       
-      resetToDefaults: () => set({ config: initialConfig })
+      // New function to replace all retention policies at once
+      setRetentionPolicies: (policies) => set((state) => {
+        return {
+          config: {
+            ...state.config,
+            retentionPolicies: policies
+          }
+        };
+      }),
+      
+      // Storage solution management
+      addStorageSolution: (solution) => set((state) => {
+        const now = Date.now();
+        // Ensure required fields are set and generate proper timestamps
+        const solutionWithDefaults: StorageSolution = {
+          id: solution.id || uuidv4(),
+          name: solution.name || 'Unnamed Storage',
+          description: solution.description || '',
+          accessLevel: solution.accessLevel || 'immediate',
+          costPerGbPerMonth: solution.costPerGbPerMonth || 0,
+          createdAt: solution.createdAt || now,
+          updatedAt: solution.updatedAt || now
+        };
+        
+        return {
+          config: {
+            ...state.config,
+            storageSolutions: [
+              ...state.config.storageSolutions,
+              solutionWithDefaults
+            ]
+          }
+        };
+      }),
+      
+      updateStorageSolution: (id, updates) => set((state) => {
+        const now = Date.now();
+        return {
+          config: {
+            ...state.config,
+            storageSolutions: state.config.storageSolutions.map(solution => 
+              solution.id === id 
+                ? { ...solution, ...updates, updatedAt: now } 
+                : solution
+            )
+          }
+        };
+      }),
+      
+      deleteStorageSolution: (id) => set((state) => {
+        // Check if the storage solution is used in any retention policy
+        const isUsed = state.config.retentionPolicies.some(policy => 
+          policy.stages && policy.stages.some(stage => stage.storageSolutionId === id)
+        );
+        
+        if (isUsed) {
+          console.error("Cannot delete storage solution that is in use by retention policies");
+          return state;
+        }
+        
+        return {
+          config: {
+            ...state.config,
+            storageSolutions: state.config.storageSolutions.filter(solution => solution.id !== id)
+          }
+        };
+      }),
+      
+      // New function to replace all storage solutions at once
+      setStorageSolutions: (solutions) => set((state) => {
+        return {
+          config: {
+            ...state.config,
+            storageSolutions: solutions
+          }
+        };
+      }),
+      
+      resetToDefaults: () => set({
+        config: initialConfig,
+        activeDocumentTypeId: null
+      })
     }),
     {
-      name: 'document-processor-config',
-    } as PersistOptions<ConfigState, unknown>
+      name: 'config-storage',
+      migrate: (persistedState: any) => {
+        const migratedState = {
+          ...persistedState,
+          config: {
+            ...persistedState.config,
+            storageSolutions: []
+          }
+        };
+        return migratedState as ConfigState;
+      }
+    } as PersistOptions<ConfigState, ConfigState>
   )
 ) 

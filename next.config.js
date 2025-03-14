@@ -8,7 +8,8 @@
 //   '@fullcalendar/react',
 
 const nextConfig = {
-  swcMinify: true,
+  // swcMinify is deprecated in Next.js 13+
+  // swcMinify: true,
   basePath: process.env.NEXT_PUBLIC_BASE_PATH,
   assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH,
   devIndicators: false,

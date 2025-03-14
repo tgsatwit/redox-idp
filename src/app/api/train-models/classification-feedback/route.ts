@@ -1,29 +1,29 @@
 import { NextResponse } from 'next/server';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, ScanCommand, QueryCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { ClassificationFeedback, ClassificationResult } from '@/lib/types';
-import { marshall } from '@aws-sdk/util-dynamodb';
 
-// In-memory storage for fallback (when DynamoDB has issues)
+// In-memory storage for development or when DynamoDB is not configured
 const inMemoryFeedback: ClassificationFeedback[] = [];
 
-// Configure AWS DynamoDB with proper credentials
-function getDynamoDBConfig() {
-  const region = process.env.APP_REGION || process.env.AWS_REGION || 'us-east-1';
-  console.log(`Using AWS DynamoDB in region: ${region}`);
-  
-  const config: Record<string, any> = { region };
-  
-  // If local environment variables are set, use them
-  if (process.env.APP_ACCESS_KEY_ID && process.env.APP_SECRET_ACCESS_KEY) {
-    config.credentials = {
-      accessKeyId: process.env.APP_ACCESS_KEY_ID,
-      secretAccessKey: process.env.APP_SECRET_ACCESS_KEY
-    };
+// Helper to get DynamoDB configuration
+const getDynamoDBConfig = () => {
+  const config: any = {
+    region: process.env.APP_REGION || 'ap-southeast-2',
+    credentials: {
+      accessKeyId: process.env.APP_ACCESS_KEY_ID || '',
+      secretAccessKey: process.env.APP_SECRET_ACCESS_KEY || ''
+    }
+  };
+
+  // Use local endpoint if specified (for development)
+  if (process.env.DYNAMODB_LOCAL_ENDPOINT) {
+    config.endpoint = process.env.DYNAMODB_LOCAL_ENDPOINT;
   }
-  
+
   return config;
-}
+};
 
 interface FeedbackRequestBody {
   documentId: string;
@@ -65,7 +65,8 @@ export async function POST(request: Request) {
       correctedDocumentType,
       feedbackSource,
       timestamp,
-      hasBeenUsedForTraining: false
+      hasBeenUsedForTraining: false,
+      status: 'pending'
     };
     
     // Add any custom fields for storage that aren't in the interface
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
       message: "Classification feedback submitted successfully",
       feedbackId: feedbackItem.id
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error submitting classification feedback:", error);
     
     // If there's an error with DynamoDB, store the feedback in memory as fallback
@@ -113,7 +114,8 @@ export async function POST(request: Request) {
           correctedDocumentType: parsedBody.correctedDocumentType,
           feedbackSource: parsedBody.feedbackSource || 'manual',
           timestamp: parsedBody.timestamp || Date.now(),
-          hasBeenUsedForTraining: false
+          hasBeenUsedForTraining: false,
+          status: 'pending'
         };
         
         inMemoryFeedback.push(fallbackItem);
@@ -121,6 +123,49 @@ export async function POST(request: Request) {
       } catch (fallbackError) {
         console.error("Failed to store feedback in memory:", fallbackError);
       }
+    }
+    
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unknown error occurred" },
+      { status: 500 }
+    );
+  }
+}
+
+// GET endpoint to fetch all classification feedback
+export async function GET() {
+  try {
+    // If DynamoDB is not configured, return in-memory data
+    if (!process.env.DYNAMODB_CLASSIFICATION_FEEDBACK_TABLE) {
+      console.warn("Missing DYNAMODB_CLASSIFICATION_FEEDBACK_TABLE, returning in-memory data");
+      return NextResponse.json(inMemoryFeedback);
+    }
+    
+    // Initialize DynamoDB client
+    const dynamoDb = new DynamoDBClient(getDynamoDBConfig());
+    
+    // Scan DynamoDB table for all feedback items
+    const scanResponse = await dynamoDb.send(
+      new ScanCommand({
+        TableName: process.env.DYNAMODB_CLASSIFICATION_FEEDBACK_TABLE
+      })
+    );
+    
+    // Process the results
+    const items = scanResponse.Items || [];
+    const feedbackItems = items.map(item => unmarshall(item)) as ClassificationFeedback[];
+    
+    // Sort by timestamp (newest first)
+    feedbackItems.sort((a, b) => b.timestamp - a.timestamp);
+    
+    return NextResponse.json(feedbackItems);
+  } catch (error: any) {
+    console.error("Error fetching classification feedback:", error);
+    
+    // If there's an error with DynamoDB, return in-memory data
+    if (inMemoryFeedback.length > 0) {
+      console.warn("Returning in-memory feedback due to DynamoDB error");
+      return NextResponse.json(inMemoryFeedback);
     }
     
     return NextResponse.json(

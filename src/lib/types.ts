@@ -95,13 +95,32 @@ export interface DocumentTypeConfig {
   defaultModelId?: string
 }
 
+export interface StorageSolution {
+  id: string;
+  name: string;
+  description: string;
+  accessLevel: 'immediate' | '1-day' | '14-day';
+  costPerGbPerMonth: number; // Cost in cents per GB per month
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RetentionStage {
+  id: string;
+  storageSolutionId: string;
+  duration: number; // Duration in days for this stage
+}
+
 export interface RetentionPolicy {
   id: string;
   name: string;
   description: string;
-  duration: number; // Duration in days
+  stages: RetentionStage[]; // Multi-stage retention support
+  totalDuration: number; // Total duration in days (sum of all stages)
   createdAt: number;
   updatedAt: number;
+  // duration field is maintained for backward compatibility
+  duration: number; // Legacy: total duration in days
 }
 
 export interface AppConfig {
@@ -111,6 +130,7 @@ export interface AppConfig {
     redactFinancial: boolean;
   };
   retentionPolicies: RetentionPolicy[];
+  storageSolutions: StorageSolution[]; // Add storage solutions to app config
   promptCategories: PromptCategory[];
 }
 
@@ -217,5 +237,51 @@ export interface PromptCategory {
     schema?: string; // Optional JSON schema for structured responses
   };
   temperature?: number; // Value between 0 and 2, default might be 1
+}
+
+export interface WorkflowTaskConfig {
+  id: string;
+  name: string;
+  description: string;
+  stepId: number; // Step ID (1, 2, 3, 4, etc.)
+  defaultEnabled: boolean; // Default toggle setting (on/off)
+  isActive: boolean; // Whether this task should be available
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type WorkflowType = 'API' | 'User' | 'Exception';
+
+export interface WorkflowTaskSetting {
+  taskId: string;
+  enabled: boolean;
+  isRequired: boolean;
+}
+
+export interface WorkflowDataElementOverride {
+  elementId: string;
+  required?: boolean;
+  action?: DataElementAction;
+}
+
+export interface WorkflowConfig {
+  id: string;
+  name: string;
+  description: string;
+  type: WorkflowType;
+  linkedWorkflowId?: string; // Used for Exception workflows to link to API workflow
+  tasks: WorkflowTaskSetting[];
+  dataElementOverrides?: WorkflowDataElementOverride[];
+  inputParameters?: string[]; // Required input parameters for API workflows
+  outputParameters?: string[]; // Expected output parameters for API workflows
+  serviceToggles?: { // For User workflows
+    [serviceId: string]: {
+      defaultEnabled: boolean;
+      userModifiable: boolean;
+    }
+  };
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 

@@ -19,7 +19,9 @@ import {
   TrainingExample,
   RetentionPolicy,
   PromptCategory,
-  Prompt
+  Prompt,
+  WorkflowTaskConfig,
+  WorkflowConfig
 } from '../types';
 import { initialConfig } from '../config-store-db';
 
@@ -31,8 +33,10 @@ const DATA_ELEMENT_TABLE = process.env.DYNAMODB_ELEMENT_TABLE || 'document-proce
 const TRAINING_DATASET_TABLE = process.env.DYNAMODB_DATASET_TABLE || 'document-processor-datasets';
 const TRAINING_EXAMPLE_TABLE = process.env.DYNAMODB_EXAMPLE_TABLE || 'document-processor-examples';
 const RETENTION_POLICY_TABLE = process.env.DYNAMODB_RETENTION_POLICY_TABLE || 'document-processor-retention-policies';
-const PROMPT_CATEGORIES_TABLE = process.env.DYNAMODB_PROMPT_CATEGORIES_TABLE || 'document-processor-prompt-categories';
-const PROMPTS_TABLE = process.env.DYNAMODB_PROMPTS_TABLE || 'document-processor-prompts';
+const PROMPT_CATEGORIES_TABLE = process.env.PROMPT_CATEGORIES_TABLE || 'document-processor-prompt-categories';
+const PROMPTS_TABLE = process.env.PROMPTS_TABLE || 'document-processor-prompts';
+const WORKFLOW_TASKS_TABLE = process.env.DYNAMODB_WORKFLOW_TASKS_TABLE || 'document-processor-workflow-tasks';
+const WORKFLOWS_TABLE = process.env.DYNAMODB_WORKFLOWS_TABLE || 'document-processor-workflows';
 
 // Local storage keys
 const LS_CONFIG_KEY = 'document-processor-config';
@@ -44,12 +48,108 @@ const LS_TRAINING_EXAMPLES_KEY = 'document-processor-examples';
 const LS_RETENTION_POLICIES_KEY = 'document-processor-retention-policies';
 const LS_PROMPT_CATEGORIES_KEY = 'document-processor-prompt-categories';
 const LS_PROMPTS_KEY = 'document-processor-prompts';
+const LS_WORKFLOW_TASKS_KEY = 'document-processor-workflow-tasks';
+const LS_WORKFLOWS_KEY = 'document-processor-workflows';
 
 // Server-side storage for fallback
 const serverStorage: Record<string, any> = {};
 
 // Default configuration for local storage
 const defaultAppConfig = initialConfig;
+
+// Default workflow tasks
+const defaultWorkflowTasks: WorkflowTaskConfig[] = [
+  {
+    id: 'task_autocls_documents',
+    name: 'Auto-classify documents',
+    description: 'Automatically classify document types using AWS Comprehend',
+    stepId: 2, // Classify & Analyse
+    defaultEnabled: true,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_classify_llm',
+    name: 'Classify with LLM',
+    description: 'Use LLM to classify documents if AWS classification is unsuccessful',
+    stepId: 2, // Classify & Analyse
+    defaultEnabled: true,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_scan_tfn',
+    name: 'Scan for TFN',
+    description: 'Detect and handle Tax File Numbers in the document',
+    stepId: 2, // Classify & Analyse
+    defaultEnabled: true,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_fraud_check',
+    name: 'Conduct Fraud Check',
+    description: 'Perform fraud analysis and verification',
+    stepId: 2, // Classify & Analyse
+    defaultEnabled: false,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_identify_data',
+    name: 'Automatically Identify Data Elements',
+    description: 'Identify and extract data elements from the document',
+    stepId: 3, // Process Document
+    defaultEnabled: true,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_redact_elements',
+    name: 'Automatically Redact Elements',
+    description: 'Redact sensitive information from the document',
+    stepId: 3, // Process Document
+    defaultEnabled: true,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_create_summary',
+    name: 'Create Summary',
+    description: 'Generate a document summary using LLM',
+    stepId: 3, // Process Document
+    defaultEnabled: false,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_save_original',
+    name: 'Save Original Document',
+    description: 'Save the original document with retention policy',
+    stepId: 3, // Process Document
+    defaultEnabled: true,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'task_save_redacted',
+    name: 'Save Redacted Document',
+    description: 'Save the redacted document with retention policy',
+    stepId: 3, // Process Document
+    defaultEnabled: false,
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+];
 
 // Get DynamoDB configuration
 const getDynamoDBConfig = () => {
@@ -148,6 +248,37 @@ export class DynamoDBConfigService {
   // Flag to track if we should use fallback storage
   private useFallbackStorage: boolean = false;
 
+  // Constructor to initialize and verify DynamoDB connectivity
+  constructor() {
+    // We'll initialize the fallback status when the first method is called
+    // This is more reliable than doing it in the constructor for SSR/browser contexts
+  }
+
+  // Helper to ensure DynamoDB is connected before operation
+  private async ensureDynamoDBConnection() {
+    // If we've already determined to use fallback storage, just return
+    if (this.useFallbackStorage) {
+      return;
+    }
+
+    try {
+      // Test DynamoDB connection by trying to scan the document types table
+      await docClient.send(
+        new ScanCommand({
+          TableName: DOC_TYPE_TABLE,
+          Limit: 1
+        })
+      );
+      
+      // If we get here, connection is successful
+      console.log('DynamoDB connection successful');
+      this.useFallbackStorage = false;
+    } catch (error) {
+      console.error('DynamoDB connection error, using fallback storage:', error);
+      this.useFallbackStorage = true;
+    }
+  }
+
   // Cache object to store data elements by subTypeId
   private subTypeDataElementsCache: Record<string, { timestamp: number, data: DataElementConfig[] }> = {};
   private CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
@@ -238,71 +369,50 @@ export class DynamoDBConfigService {
    * Get all document types
    */
   async getAllDocumentTypes(): Promise<DocumentTypeConfig[]> {
-    // Reset the fallback flag to ensure we always try DynamoDB first
-    this.useFallbackStorage = false;
-    console.log('Getting all document types from DynamoDB...');
-
+    // First ensure our DynamoDB connection is valid
+    await this.ensureDynamoDBConnection();
+    
     try {
-      const response = await docClient.send(
-        new ScanCommand({
-          TableName: DOC_TYPE_TABLE,
-        })
-      );
-
-      console.log(`Found ${response.Items?.length || 0} document types in DynamoDB`);
-      if (response.Items && response.Items.length > 0) {
-        console.log('First document type:', response.Items[0]);
+      // If using fallback storage, get from local storage
+      if (this.useFallbackStorage) {
+        console.log('Using fallback storage for document types');
+        return getFromLocalStorage<DocumentTypeConfig[]>(LS_DOC_TYPES_KEY, []);
       }
 
-      const documentTypes = (response.Items || []) as DocumentTypeConfig[];
+      // Otherwise, get from DynamoDB
+      console.log('Fetching document types from DynamoDB table:', DOC_TYPE_TABLE);
+      const response = await docClient.send(
+        new ScanCommand({
+          TableName: DOC_TYPE_TABLE
+        })
+      );
       
-      // For each document type, load its sub-types
-      for (const docType of documentTypes) {
+      const documentTypes = response.Items as DocumentTypeConfig[] || [];
+      
+      console.log(`Found ${documentTypes.length} document types in DynamoDB`);
+      
+      // Cache in local storage for offline use
+      saveToLocalStorage(LS_DOC_TYPES_KEY, documentTypes);
+      
+      // For each document type, load the sub-types asynchronously
+      await Promise.all(documentTypes.map(async (docType) => {
         try {
-          // Load sub-types for this document type (each with their own data elements)
           const subTypes = await this.getSubTypesByDocumentType(docType.id);
           docType.subTypes = subTypes;
         } catch (error) {
           console.warn(`Error fetching sub-types for document type ${docType.id}:`, error);
-          // Keep the embedded sub-types if any error occurs
-          docType.subTypes = docType.subTypes || [];
+          docType.subTypes = [];
         }
-      }
-
+      }));
+      
       return documentTypes;
     } catch (error) {
       console.error('Error fetching document types:', error);
       
-      // If permission error, use local storage fallback
-      if (isPermissionError(error)) {
-        console.log('Using local storage fallback for document types due to permission issues');
-        this.useFallbackStorage = true;
-        
-        // Try to get from app config first
-        const config = getFromLocalStorage<AppConfig>(LS_CONFIG_KEY, defaultAppConfig);
-        console.log('App config from local storage after error:', config);
-        
-        // Also check document types storage
-        const docTypes = getFromLocalStorage<DocumentTypeConfig[]>(LS_DOC_TYPES_KEY, []);
-        console.log('Document types from separate storage after error:', docTypes);
-        
-        // Merge both sources, preferring app config if there are duplicates
-        const mergedDocTypes = [...docTypes];
-        
-        // Add document types from app config that aren't already in the merged list
-        if (config && config.documentTypes) {
-          for (const docType of config.documentTypes) {
-            if (!mergedDocTypes.some(dt => dt.id === docType.id)) {
-              mergedDocTypes.push(docType);
-            }
-          }
-        }
-        
-        console.log('Merged document types from local storage after error:', mergedDocTypes);
-        return mergedDocTypes;
-      }
-      
-      throw error;
+      // In case of error, return from local storage as fallback
+      const fallback = getFromLocalStorage<DocumentTypeConfig[]>(LS_DOC_TYPES_KEY, []);
+      console.log(`Using fallback storage, found ${fallback.length} document types`);
+      return fallback;
     }
   }
 
@@ -310,51 +420,185 @@ export class DynamoDBConfigService {
    * Get document type by ID
    */
   async getDocumentType(id: string): Promise<DocumentTypeConfig | null> {
+    console.log(`Getting document type ${id}`);
+    
+    // Ensure DynamoDB connection
+    try {
+      await this.ensureDynamoDBConnection();
+    } catch (connectionError) {
+      console.error('DynamoDB connection error:', connectionError);
+      this.useFallbackStorage = true;
+      console.log('Falling back to local storage due to connection error');
+    }
+    
     try {
       // If using fallback storage, get from local storage
       if (this.useFallbackStorage) {
-        const config = getFromLocalStorage<AppConfig>(LS_CONFIG_KEY, defaultAppConfig);
-        return config.documentTypes.find(dt => dt.id === id) || null;
+        console.log('Using fallback storage for document type');
+        const allDocTypes = getFromLocalStorage<DocumentTypeConfig[]>(LS_DOC_TYPES_KEY, []);
+        return allDocTypes.find(dt => dt.id === id) || null;
       }
-
-      const response = await docClient.send(
-        new GetCommand({
-          TableName: DOC_TYPE_TABLE,
-          Key: { id }
-        })
-      );
-
-      if (!response.Item) {
+      
+      // Otherwise, get from DynamoDB
+      console.log(`Fetching document type ${id} from DynamoDB`);
+      
+      // Step 1: Get the basic document type
+      let docTypeResponse;
+      try {
+        docTypeResponse = await docClient.send(
+          new GetCommand({
+            TableName: DOC_TYPE_TABLE,
+            Key: { id }
+          })
+        );
+      } catch (docTypeError) {
+        console.error(`Error fetching document type ${id} from DynamoDB:`, docTypeError);
+        
+        // Fall back to local storage if we encounter an error
+        console.log('Falling back to local storage for document type');
+        const allDocTypes = getFromLocalStorage<DocumentTypeConfig[]>(LS_DOC_TYPES_KEY, []);
+        return allDocTypes.find(dt => dt.id === id) || null;
+      }
+      
+      if (!docTypeResponse.Item) {
+        console.log(`Document type ${id} not found in DynamoDB`);
         return null;
       }
-
-      const docType = response.Item as DocumentTypeConfig;
       
+      // Create document type object
+      const docType = docTypeResponse.Item as DocumentTypeConfig;
+      console.log(`Found document type: ${docType.name}`);
+      
+      // Initialize arrays for sub-types and data elements
+      docType.subTypes = [];
+      docType.dataElements = [];
+      
+      // Step 2: Get sub-types for this document type
+      console.log(`Fetching sub-types for document type ${id}`);
+      let subTypesResponse;
       try {
-        // Load sub-types with their self-contained elements
-        if (docType.id) {
-          const subTypes = await this.getSubTypesByDocumentType(docType.id);
-          docType.subTypes = subTypes;
-        }
-      } catch (error) {
-        console.warn(`Error fetching sub-types for document type ${id}:`, error);
-        // Keep the embedded sub-types if any error occurs
-        docType.subTypes = docType.subTypes || [];
+        subTypesResponse = await docClient.send(
+          new QueryCommand({
+            TableName: SUB_TYPE_TABLE,
+            IndexName: 'documentTypeId-index',
+            KeyConditionExpression: 'documentTypeId = :docTypeId',
+            ExpressionAttributeValues: {
+              ':docTypeId': id
+            }
+          })
+        );
+      } catch (subTypesError) {
+        console.error(`Error fetching sub-types for document type ${id}:`, subTypesError);
+        // Continue with empty subtypes rather than failing completely
+        subTypesResponse = { Items: [] };
       }
-
+      
+      const subTypes = (subTypesResponse.Items || []) as DocumentSubTypeConfig[];
+      console.log(`Found ${subTypes.length} sub-types for document type ${id}`);
+      
+      // Step 3: For each sub-type, get its data elements
+      for (const subType of subTypes) {
+        console.log(`Fetching data elements for sub-type ${subType.id}`);
+        
+        let subTypeElementsResponse;
+        try {
+          // Use precise query to find all elements with this subTypeId
+          subTypeElementsResponse = await docClient.send(
+            new QueryCommand({
+              TableName: DATA_ELEMENT_TABLE,
+              IndexName: 'subTypeId-index',
+              KeyConditionExpression: 'subTypeId = :subTypeId',
+              ExpressionAttributeValues: {
+                ':subTypeId': subType.id
+              }
+            })
+          );
+        } catch (elementError) {
+          console.error(`Error using index to fetch data elements for sub-type ${subType.id}:`, elementError);
+          
+          // If index query fails, try a scan as fallback (less efficient but more reliable)
+          try {
+            console.log(`Falling back to scan for data elements with subTypeId = ${subType.id}`);
+            subTypeElementsResponse = await docClient.send(
+              new ScanCommand({
+                TableName: DATA_ELEMENT_TABLE,
+                FilterExpression: 'subTypeId = :subTypeId',
+                ExpressionAttributeValues: {
+                  ':subTypeId': subType.id
+                }
+              })
+            );
+          } catch (scanError) {
+            console.error(`Error scanning for data elements for sub-type ${subType.id}:`, scanError);
+            // Continue with empty elements rather than failing completely
+            subTypeElementsResponse = { Items: [] };
+          }
+        }
+        
+        const subTypeElements = (subTypeElementsResponse.Items || []) as DataElementConfig[];
+        console.log(`Found ${subTypeElements.length} data elements for sub-type ${subType.id}`);
+        
+        // Log each element for debugging
+        subTypeElements.forEach(element => {
+          console.log(`   Element ${element.id} (${element.name}): action = ${element.action}, subTypeId: ${element.subTypeId}`);
+          
+          // Ensure subTypeId is set (just in case)
+          element.subTypeId = subType.id;
+        });
+        
+        // Assign data elements to sub-type
+        subType.dataElements = subTypeElements;
+        
+        // Add sub-type to document type
+        docType.subTypes.push(subType);
+      }
+      
+      // Step 4: Get document-level data elements (elements without a subTypeId)
+      console.log(`Fetching document-level data elements for ${id}`);
+      let docElementsResponse;
+      try {
+        docElementsResponse = await docClient.send(
+          new QueryCommand({
+            TableName: DATA_ELEMENT_TABLE,
+            IndexName: 'documentTypeId-index',
+            KeyConditionExpression: 'documentTypeId = :docTypeId',
+            FilterExpression: 'attribute_not_exists(subTypeId)',
+            ExpressionAttributeValues: {
+              ':docTypeId': id
+            }
+          })
+        );
+      } catch (docElementError) {
+        console.error(`Error fetching document-level data elements for ${id}:`, docElementError);
+        // Continue with empty elements rather than failing completely
+        docElementsResponse = { Items: [] };
+      }
+      
+      const docElements = (docElementsResponse.Items || []) as DataElementConfig[];
+      console.log(`Found ${docElements.length} document-level data elements for ${id}`);
+      
+      // Log each document-level element for debugging
+      docElements.forEach(element => {
+        console.log(`   Element ${element.id} (${element.name}): action = ${element.action}`);
+      });
+      
+      // Assign document-level data elements
+      docType.dataElements = docElements;
+      
       return docType;
     } catch (error) {
       console.error(`Error fetching document type ${id}:`, error);
       
-      // If permission error, use local storage fallback
+      // In case of error, try fallback storage
       if (isPermissionError(error)) {
-        console.log('Using local storage fallback for document type due to permission issues');
-        this.useFallbackStorage = true;
-        const config = getFromLocalStorage<AppConfig>(LS_CONFIG_KEY, defaultAppConfig);
-        return config.documentTypes.find(dt => dt.id === id) || null;
+        console.log(`Permission error fetching document type ${id}, using fallback storage`);
+        const allDocTypes = getFromLocalStorage<DocumentTypeConfig[]>(LS_DOC_TYPES_KEY, []);
+        return allDocTypes.find(dt => dt.id === id) || null;
       }
       
-      throw error;
+      // Rather than propagating the error, return null with a warning
+      console.warn(`Unable to fetch document type ${id}, returning null`);
+      return null;
     }
   }
 
@@ -909,7 +1153,7 @@ export class DynamoDBConfigService {
             const updatedElementIds = new Set(updates.dataElements.map(e => e.id));
             
             // Find element IDs to remove (in current but not in updates)
-            const elementsToRemove = [...currentElementIds].filter(id => !updatedElementIds.has(id));
+            const elementsToRemove = Array.from(currentElementIds).filter(id => !updatedElementIds.has(id));
             
             // Remove elements from the elements table that are no longer in the sub-type
             for (const elementId of elementsToRemove) {
@@ -1145,122 +1389,63 @@ export class DynamoDBConfigService {
   }
 
   /**
-   * Get all data elements for a specific sub-type
+   * Get data elements by sub-type id
    */
   async getDataElementsBySubType(subTypeId: string): Promise<DataElementConfig[]> {
-    if (!subTypeId) {
-      return [];
-    }
-
+    console.log(`Getting data elements for sub-type ${subTypeId}`);
+    
     // Check cache first
-    const cachedData = this.subTypeDataElementsCache[subTypeId];
-    if (cachedData && (Date.now() - cachedData.timestamp) < this.CACHE_TTL_MS) {
-      return cachedData.data;
+    const cacheEntry = this.subTypeDataElementsCache[subTypeId];
+    if (cacheEntry && (Date.now() - cacheEntry.timestamp) < this.CACHE_TTL_MS) {
+      console.log(`Using cached data elements for sub-type ${subTypeId}`);
+      return cacheEntry.data;
     }
-
-    if (this.useFallbackStorage) {
-      const config = getFromLocalStorage<AppConfig>(LS_CONFIG_KEY, defaultAppConfig);
-      const elements = [];
-      
-      // Find all document types with the matching subType
-      for (const docType of config.documentTypes) {
-        const subType = docType.subTypes?.find(st => st.id === subTypeId);
-        if (subType?.dataElements) {
-          elements.push(...subType.dataElements);
-        }
+    
+    // Ensure DynamoDB connection
+    await this.ensureDynamoDBConnection();
+    
+    try {
+      // If using fallback storage, get from local storage
+      if (this.useFallbackStorage) {
+        console.log('Using fallback storage for data elements');
+        const allElements = getFromLocalStorage<DataElementConfig[]>(LS_DATA_ELEMENTS_KEY, []);
+        const subTypeElements = allElements.filter(el => el.subTypeId === subTypeId);
+        return subTypeElements;
       }
       
-      return elements;
-    }
-
-    try {
-      // Try using the index first if it exists
+      // Otherwise, get from DynamoDB
+      console.log(`Fetching data elements for sub-type ${subTypeId} from DynamoDB`);
       const response = await docClient.send(
         new QueryCommand({
           TableName: DATA_ELEMENT_TABLE,
           IndexName: 'subTypeId-index',
           KeyConditionExpression: 'subTypeId = :subTypeId',
           ExpressionAttributeValues: {
-            ':subTypeId': subTypeId
-          }
-        })
-      );
-
-      const results = (response.Items || []) as DataElementConfig[];
-      
-      // Cache the results
-      this.subTypeDataElementsCache[subTypeId] = {
-        timestamp: Date.now(),
-        data: results
-      };
-      
-      return results;
-    } catch (indexError: any) {
-      // If the index doesn't exist or we don't have permission, use an optimized query approach
-      console.warn(`Index issue or permission error, using optimized approach for sub-type data elements: ${indexError.message}`);
-      
-      try {
-        // First try to get the documentTypeId for this subTypeId to optimize our scan
-        const subTypeResponse = await docClient.send(
-          new GetCommand({
-            TableName: 'document-processor-subtypes',
-            Key: { id: subTypeId }
-          })
-        );
-        
-        const subTypeItem = subTypeResponse.Item as DocumentSubTypeConfig;
-        const documentTypeId = subTypeItem?.documentTypeId;
-        
-        // If we found the document type ID, we can filter elements more efficiently
-        if (documentTypeId) {
-          // Try to use the documentTypeId-index first, which is known to exist
-          const queryResponse = await docClient.send(
-            new QueryCommand({
-              TableName: DATA_ELEMENT_TABLE,
-              IndexName: 'documentTypeId-index',
-              KeyConditionExpression: 'documentTypeId = :docTypeId',
-              FilterExpression: 'subTypeId = :subTypeId',
-              ExpressionAttributeValues: {
-                ':docTypeId': documentTypeId,
-                ':subTypeId': subTypeId
-              }
-            })
-          );
-          
-          const results = (queryResponse.Items || []) as DataElementConfig[];
-          
-          // Cache the results
-          this.subTypeDataElementsCache[subTypeId] = {
-            timestamp: Date.now(),
-            data: results
-          };
-          
-          return results;
-        }
-      } catch (subTypeError) {
-        console.warn(`Error getting subType details: ${(subTypeError as Error).message}, falling back to full scan`);
-      }
-      
-      // If all else fails, fall back to the original scan approach
-      const scanResponse = await docClient.send(
-        new ScanCommand({
-          TableName: DATA_ELEMENT_TABLE,
-          FilterExpression: 'subTypeId = :subTypeId',
-          ExpressionAttributeValues: {
-            ':subTypeId': subTypeId
-          }
+            ':subTypeId': subTypeId,
+          },
         })
       );
       
-      const results = (scanResponse.Items || []) as DataElementConfig[];
+      const elements = (response.Items || []) as DataElementConfig[];
+      console.log(`Found ${elements.length} data elements for sub-type ${subTypeId} in DynamoDB`);
       
-      // Cache the results
+      // Log every element for debugging
+      elements.forEach(element => {
+        console.log(`Element ${element.id} (${element.name}): action = ${element.action}`);
+      });
+      
+      // Cache the result
       this.subTypeDataElementsCache[subTypeId] = {
         timestamp: Date.now(),
-        data: results
+        data: elements,
       };
       
-      return results;
+      return elements;
+    } catch (error) {
+      console.error(`Error fetching data elements for sub-type ${subTypeId}:`, error);
+      
+      // In case of error, return empty array
+      return [];
     }
   }
 
@@ -2647,5 +2832,493 @@ export class DynamoDBConfigService {
     }
     
     return config;
+  }
+
+  /**
+   * Get all workflow tasks
+   */
+  async getAllWorkflowTasks(): Promise<WorkflowTaskConfig[]> {
+    try {
+      if (this.useFallbackStorage) {
+        const tasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        // Return default tasks if none are found
+        if (tasks.length === 0) {
+          saveToLocalStorage(LS_WORKFLOW_TASKS_KEY, defaultWorkflowTasks);
+          return defaultWorkflowTasks;
+        }
+        return tasks;
+      }
+
+      const command = new ScanCommand({
+        TableName: WORKFLOW_TASKS_TABLE
+      });
+
+      const response = await docClient.send(command);
+      const tasks = response.Items as WorkflowTaskConfig[] || [];
+      
+      // If no tasks found, initialize with default tasks
+      if (tasks.length === 0) {
+        console.log('No workflow tasks found, initializing with defaults...');
+        
+        // Use batch write to insert default tasks
+        const batchItems = defaultWorkflowTasks.map(task => ({
+          PutRequest: {
+            Item: task
+          }
+        }));
+        
+        // DynamoDB can only process 25 items at a time in a batch
+        for (let i = 0; i < batchItems.length; i += 25) {
+          const batch = batchItems.slice(i, i + 25);
+          
+          const batchCommand = new BatchWriteCommand({
+            RequestItems: {
+              [WORKFLOW_TASKS_TABLE]: batch
+            }
+          });
+          
+          await docClient.send(batchCommand);
+        }
+        
+        return defaultWorkflowTasks;
+      }
+      
+      return tasks;
+    } catch (error) {
+      console.error('Error getting workflow tasks:', error);
+      
+      if (isPermissionError(error)) {
+        this.useFallbackStorage = true;
+        const tasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        // Return default tasks if none are found
+        if (tasks.length === 0) {
+          saveToLocalStorage(LS_WORKFLOW_TASKS_KEY, defaultWorkflowTasks);
+          return defaultWorkflowTasks;
+        }
+        return tasks;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Get workflow tasks by step ID
+   */
+  async getWorkflowTasksByStep(stepId: number): Promise<WorkflowTaskConfig[]> {
+    try {
+      if (this.useFallbackStorage) {
+        const allTasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        return allTasks.filter(task => task.stepId === stepId);
+      }
+
+      const command = new QueryCommand({
+        TableName: WORKFLOW_TASKS_TABLE,
+        IndexName: 'StepIdIndex', // We would need to create this GSI in DynamoDB
+        KeyConditionExpression: 'stepId = :stepId',
+        ExpressionAttributeValues: {
+          ':stepId': stepId
+        }
+      });
+
+      const response = await docClient.send(command);
+      return response.Items as WorkflowTaskConfig[] || [];
+    } catch (error) {
+      console.error(`Error getting workflow tasks for step ${stepId}:`, error);
+      
+      if (isPermissionError(error)) {
+        this.useFallbackStorage = true;
+        const allTasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        return allTasks.filter(task => task.stepId === stepId);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Add a new workflow task
+   */
+  async addWorkflowTask(task: Omit<WorkflowTaskConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTaskConfig> {
+    const now = Date.now();
+    const newTask: WorkflowTaskConfig = {
+      id: createId(),
+      ...task,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    try {
+      if (this.useFallbackStorage) {
+        const tasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        tasks.push(newTask);
+        saveToLocalStorage(LS_WORKFLOW_TASKS_KEY, tasks);
+        return newTask;
+      }
+
+      const command = new PutCommand({
+        TableName: WORKFLOW_TASKS_TABLE,
+        Item: newTask
+      });
+
+      await docClient.send(command);
+      return newTask;
+    } catch (error) {
+      console.error('Error adding workflow task:', error);
+      
+      if (isPermissionError(error)) {
+        this.useFallbackStorage = true;
+        const tasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        tasks.push(newTask);
+        saveToLocalStorage(LS_WORKFLOW_TASKS_KEY, tasks);
+        return newTask;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Update a workflow task
+   */
+  async updateWorkflowTask(id: string, updates: Partial<Omit<WorkflowTaskConfig, 'id' | 'createdAt'>>): Promise<void> {
+    try {
+      if (this.useFallbackStorage) {
+        const tasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        const taskIndex = tasks.findIndex(task => task.id === id);
+        
+        if (taskIndex === -1) {
+          throw new Error(`Workflow task with ID ${id} not found`);
+        }
+        
+        tasks[taskIndex] = {
+          ...tasks[taskIndex],
+          ...updates,
+          updatedAt: Date.now()
+        };
+        
+        saveToLocalStorage(LS_WORKFLOW_TASKS_KEY, tasks);
+        return;
+      }
+
+      // Build update expression
+      const expressionParts: string[] = [];
+      const attributeNames: Record<string, string> = {};
+      const attributeValues: Record<string, any> = {
+        ':updatedAt': Date.now()
+      };
+      
+      Object.entries(updates).forEach(([key, value], index) => {
+        const attributeKey = `#key${index}`;
+        const attributeValue = `:val${index}`;
+        
+        expressionParts.push(`${attributeKey} = ${attributeValue}`);
+        attributeNames[attributeKey] = key;
+        attributeValues[attributeValue] = value;
+      });
+      
+      // Always update the updatedAt timestamp
+      expressionParts.push(`#updatedAtKey = :updatedAt`);
+      attributeNames['#updatedAtKey'] = 'updatedAt';
+      
+      const updateExpression = `SET ${expressionParts.join(', ')}`;
+
+      const command = new UpdateCommand({
+        TableName: WORKFLOW_TASKS_TABLE,
+        Key: { id },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: attributeNames,
+        ExpressionAttributeValues: attributeValues,
+        ReturnValues: 'NONE'
+      });
+
+      await docClient.send(command);
+    } catch (error) {
+      console.error(`Error updating workflow task ${id}:`, error);
+      
+      if (isPermissionError(error)) {
+        this.useFallbackStorage = true;
+        await this.updateWorkflowTask(id, updates);
+        return;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a workflow task
+   */
+  async deleteWorkflowTask(id: string): Promise<void> {
+    try {
+      if (this.useFallbackStorage) {
+        const tasks = getFromLocalStorage<WorkflowTaskConfig[]>(LS_WORKFLOW_TASKS_KEY, []);
+        const filteredTasks = tasks.filter(task => task.id !== id);
+        
+        if (filteredTasks.length === tasks.length) {
+          throw new Error(`Workflow task with ID ${id} not found`);
+        }
+        
+        saveToLocalStorage(LS_WORKFLOW_TASKS_KEY, filteredTasks);
+        return;
+      }
+
+      const command = new DeleteCommand({
+        TableName: WORKFLOW_TASKS_TABLE,
+        Key: { id }
+      });
+
+      await docClient.send(command);
+    } catch (error) {
+      console.error(`Error deleting workflow task ${id}:`, error);
+      
+      if (isPermissionError(error)) {
+        this.useFallbackStorage = true;
+        await this.deleteWorkflowTask(id);
+        return;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Get all workflows
+   */
+  async getAllWorkflows(): Promise<WorkflowConfig[]> {
+    try {
+      if (this.useFallbackStorage) {
+        return getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+      }
+
+      const response = await docClient.send(
+        new ScanCommand({
+          TableName: WORKFLOWS_TABLE,
+        })
+      );
+
+      return response.Items as WorkflowConfig[] || [];
+    } catch (error) {
+      console.error('Error fetching workflows:', error);
+      
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for workflows due to permission issues');
+        this.useFallbackStorage = true;
+        return getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Get a specific workflow by ID
+   */
+  async getWorkflowById(id: string): Promise<WorkflowConfig | null> {
+    try {
+      if (this.useFallbackStorage) {
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        return workflows.find(workflow => workflow.id === id) || null;
+      }
+
+      const response = await docClient.send(
+        new GetCommand({
+          TableName: WORKFLOWS_TABLE,
+          Key: { id }
+        })
+      );
+
+      return (response.Item as WorkflowConfig) || null;
+    } catch (error) {
+      console.error(`Error fetching workflow ${id}:`, error);
+      
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for workflow due to permission issues');
+        this.useFallbackStorage = true;
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        return workflows.find(workflow => workflow.id === id) || null;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Get workflows by type
+   */
+  async getWorkflowsByType(type: string): Promise<WorkflowConfig[]> {
+    try {
+      if (this.useFallbackStorage) {
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        return workflows.filter(workflow => workflow.type === type);
+      }
+
+      const response = await docClient.send(
+        new ScanCommand({
+          TableName: WORKFLOWS_TABLE,
+          FilterExpression: 'type = :type',
+          ExpressionAttributeValues: {
+            ':type': type
+          }
+        })
+      );
+
+      return response.Items as WorkflowConfig[] || [];
+    } catch (error) {
+      console.error(`Error fetching workflows by type ${type}:`, error);
+      
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for workflows by type due to permission issues');
+        this.useFallbackStorage = true;
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        return workflows.filter(workflow => workflow.type === type);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Add a new workflow
+   */
+  async addWorkflow(workflow: Omit<WorkflowConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowConfig> {
+    const timestamp = Date.now();
+    const workflowWithId: WorkflowConfig = {
+      ...workflow,
+      id: createId(),
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    try {
+      if (this.useFallbackStorage) {
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        workflows.push(workflowWithId);
+        saveToLocalStorage(LS_WORKFLOWS_KEY, workflows);
+        return workflowWithId;
+      }
+
+      await docClient.send(
+        new PutCommand({
+          TableName: WORKFLOWS_TABLE,
+          Item: workflowWithId
+        })
+      );
+
+      return workflowWithId;
+    } catch (error) {
+      console.error('Error adding workflow:', error);
+      
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for adding workflow due to permission issues');
+        this.useFallbackStorage = true;
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        workflows.push(workflowWithId);
+        saveToLocalStorage(LS_WORKFLOWS_KEY, workflows);
+        return workflowWithId;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing workflow
+   */
+  async updateWorkflow(id: string, updates: Partial<Omit<WorkflowConfig, 'id' | 'createdAt'>>): Promise<void> {
+    try {
+      if (this.useFallbackStorage) {
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        const updatedWorkflows = workflows.map(workflow => 
+          workflow.id === id 
+            ? { ...workflow, ...updates, updatedAt: Date.now() }
+            : workflow
+        );
+        saveToLocalStorage(LS_WORKFLOWS_KEY, updatedWorkflows);
+        return;
+      }
+
+      // Build update expression
+      const expressionParts: string[] = [];
+      const expressionAttributeNames: Record<string, string> = {};
+      const expressionAttributeValues: Record<string, any> = {
+        ':updatedAt': Date.now()
+      };
+
+      // Add each update to the expression
+      Object.entries(updates).forEach(([key, value], index) => {
+        expressionParts.push(`#${key} = :${key}`);
+        expressionAttributeNames[`#${key}`] = key;
+        expressionAttributeValues[`:${key}`] = value;
+      });
+
+      // Always update the updatedAt timestamp
+      expressionParts.push('#updatedAt = :updatedAt');
+      expressionAttributeNames['#updatedAt'] = 'updatedAt';
+
+      // Create the full update expression
+      const updateExpression = `SET ${expressionParts.join(', ')}`;
+
+      await docClient.send(
+        new UpdateCommand({
+          TableName: WORKFLOWS_TABLE,
+          Key: { id },
+          UpdateExpression: updateExpression,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues
+        })
+      );
+    } catch (error) {
+      console.error(`Error updating workflow ${id}:`, error);
+      
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for updating workflow due to permission issues');
+        this.useFallbackStorage = true;
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        const updatedWorkflows = workflows.map(workflow => 
+          workflow.id === id 
+            ? { ...workflow, ...updates, updatedAt: Date.now() }
+            : workflow
+        );
+        saveToLocalStorage(LS_WORKFLOWS_KEY, updatedWorkflows);
+        return;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a workflow
+   */
+  async deleteWorkflow(id: string): Promise<void> {
+    try {
+      if (this.useFallbackStorage) {
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        const filteredWorkflows = workflows.filter(workflow => workflow.id !== id);
+        saveToLocalStorage(LS_WORKFLOWS_KEY, filteredWorkflows);
+        return;
+      }
+
+      await docClient.send(
+        new DeleteCommand({
+          TableName: WORKFLOWS_TABLE,
+          Key: { id }
+        })
+      );
+    } catch (error) {
+      console.error(`Error deleting workflow ${id}:`, error);
+      
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for deleting workflow due to permission issues');
+        this.useFallbackStorage = true;
+        const workflows = getFromLocalStorage<WorkflowConfig[]>(LS_WORKFLOWS_KEY, []);
+        const filteredWorkflows = workflows.filter(workflow => workflow.id !== id);
+        saveToLocalStorage(LS_WORKFLOWS_KEY, filteredWorkflows);
+        return;
+      }
+      
+      throw error;
+    }
   }
 } 

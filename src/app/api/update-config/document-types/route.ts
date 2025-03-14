@@ -2,16 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DynamoDBConfigService } from '@/lib/services/dynamodb-config-service';
 import { DocumentTypeConfig } from '@/lib/types';
 
-const configService = new DynamoDBConfigService();
-
 /**
  * GET - Retrieve all document types
  */
 export async function GET() {
   try {
     console.log('Fetching all document types...');
+    
+    // Create a new instance of the service for each request to ensure fresh connection checks
+    const configService = new DynamoDBConfigService();
+    
     const documentTypes = await configService.getAllDocumentTypes();
     console.log(`Found ${documentTypes.length} document types`);
+    
+    // If document types array is empty, log a warning
+    if (documentTypes.length === 0) {
+      console.warn('No document types found in database');
+    }
+    
     return NextResponse.json(documentTypes);
   } catch (error: any) {
     console.error('Error fetching document types:', error);
@@ -30,6 +38,7 @@ export async function POST(request: NextRequest) {
     const documentType = await request.json() as Omit<DocumentTypeConfig, 'id'>;
     
     if (!documentType.name) {
+      console.warn('Attempted to create document type without a name');
       return NextResponse.json(
         { error: 'Document type name is required' },
         { status: 400 }
@@ -37,6 +46,10 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('Creating new document type:', documentType);
+    
+    // Create a new instance of the service for each request
+    const configService = new DynamoDBConfigService();
+    
     const newDocType = await configService.createDocumentType(documentType);
     console.log('Created document type:', newDocType);
     

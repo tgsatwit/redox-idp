@@ -12,7 +12,7 @@ const openai = new OpenAI({
 
 // Initialize DynamoDB client
 const ddbClient = new DynamoDBClient({
-  region: process.env.AWS_REGION || 'ap-southeast-2'
+  region: process.env.APP_REGION || 'ap-southeast-2'
 });
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 

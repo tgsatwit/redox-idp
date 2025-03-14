@@ -8,17 +8,17 @@ import { marshall } from '@aws-sdk/util-dynamodb';
 const getDynamoDBConfig = () => {
   // Environment variables to check (in order of priority)
   const accessKeyOptions = [
-    process.env.AWS_ACCESS_KEY_ID,
+    process.env.APP_ACCESS_KEY_ID,
     process.env.APP_ACCESS_KEY_ID
   ];
   
   const secretKeyOptions = [
-    process.env.AWS_SECRET_ACCESS_KEY,
+    process.env.APP_SECRET_ACCESS_KEY,
     process.env.APP_SECRET_ACCESS_KEY
   ];
   
   const regionOptions = [
-    process.env.AWS_REGION,
+    process.env.APP_REGION,
     process.env.APP_REGION,
     'us-east-1'  // Default fallback region
   ];

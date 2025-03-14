@@ -7,12 +7,12 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 
 // Use APP_ prefixed environment variables as they're available in your system
-const AWS_ACCESS_KEY_ID = process.env.APP_ACCESS_KEY_ID; 
-const AWS_SECRET_ACCESS_KEY = process.env.APP_SECRET_ACCESS_KEY;
-const AWS_REGION = process.env.APP_REGION || 'ap-southeast-2';
+const APP_ACCESS_KEY_ID = process.env.APP_ACCESS_KEY_ID; 
+const APP_SECRET_ACCESS_KEY = process.env.APP_SECRET_ACCESS_KEY;
+const APP_REGION = process.env.APP_REGION || 'ap-southeast-2';
 
 // Check if AWS credentials are available
-const hasAwsCredentials = AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY;
+const hasAwsCredentials = APP_ACCESS_KEY_ID && APP_SECRET_ACCESS_KEY;
 
 // Log for debugging - environment variables are available but values are not exposed
 console.log('APP_REGION is set:', !!process.env.APP_REGION);
@@ -22,15 +22,15 @@ console.log('DYNAMODB_ELEMENT_TABLE is set:', !!process.env.DYNAMODB_ELEMENT_TAB
 
 // Configure DynamoDB client
 const clientConfig = {
-  region: AWS_REGION,
+  region: APP_REGION,
 };
 
 // Only add credentials if they're available
 if (hasAwsCredentials) {
   Object.assign(clientConfig, {
     credentials: {
-      accessKeyId: AWS_ACCESS_KEY_ID || '',
-      secretAccessKey: AWS_SECRET_ACCESS_KEY || '',
+      accessKeyId: APP_ACCESS_KEY_ID || '',
+      secretAccessKey: APP_SECRET_ACCESS_KEY || '',
     }
   });
 }

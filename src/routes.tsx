@@ -4,6 +4,7 @@ import {
   MdLock,
   MdOutlineShoppingCart,
   MdSettings,
+  MdOutlineDescription,
 } from 'react-icons/md';
 import React from 'react';
 
@@ -28,20 +29,64 @@ const routes = [
         path: '/dashboards/default',
       },
       {
+        name: 'IDP Performance',
+        layout: '/admin',
+        path: '/dashboards/performance',
+      },
+      {
+        name: 'User Dashboard',
+        layout: '/admin',
+        path: '/dashboards/user-dashboard',
+      },  
+      {
+        name: 'Team Dashboard',
+        layout: '/admin',
+        path: '/dashboards/team-dashboard',
+      },
+    ],
+  },
+  // --- Document Processing ---
+  {
+    name: 'Document Processing',
+    path: '/document-processing',
+    icon: Icon(MdOutlineDescription),
+    collapse: true,
+    items: [
+      {
+        name: 'Store Documents',
+        layout: '/admin',
+        path: '/document-processing/storage',
+      },
+      {
         name: 'Process Document',
         layout: '/admin',
-        path: '/dashboards/process-document',
+        path: '/document-processing/process',
       },
       {
-        name: 'Car Interface',
+        name: 'Document Workflow',
         layout: '/admin',
-        path: '/dashboards/car-interface',
+        path: '/document-processing/workflow',
       },
       {
-        name: 'Smart Home',
+        name: 'Exception Management',
         layout: '/admin',
-        path: '/dashboards/smart-home',
+        path: '/document-processing/exceptions',
       },
+      {
+        name: 'Document Queue',
+        layout: '/admin',
+        path: '/document-processing/queue',
+      },
+      {
+        name: 'Processed Documents',
+        layout: '/admin',
+        path: '/document-processing/processed',
+      },
+      {
+        name: 'Rejected Documents',
+        layout: '/admin',
+        path: '/document-processing/rejected',
+      }
     ],
   },
   // --- Configuration ---
@@ -52,9 +97,14 @@ const routes = [
     collapse: true,
     items: [
       {
-        name: 'Documents',
+        name: 'Document Types',
         layout: '/admin',
         path: '/config/documents',
+      },
+      {
+        name: 'Services',
+        layout: '/admin',
+        path: '/config/services',
       },
       {
         name: 'Workflows',
@@ -62,17 +112,17 @@ const routes = [
         path: '/config/workflows',
       },
       {
-        name: 'Models',
+        name: 'Model Management',
         layout: '/admin',
-        path: '/config/models',
+        path: '/config/training',
       },
       {
-        name: 'Prompts',
+        name: 'Prompt Management',
         layout: '/admin',
         path: '/config/prompts',
       },
       {
-        name: 'Retention',
+        name: 'Retention Policies',
         layout: '/admin',
         path: '/config/retention',
       },
@@ -281,105 +331,6 @@ const routes = [
             layout: '/admin',
             path: '/main/others/messages',
             exact: false,
-          },
-        ],
-      },
-    ],
-  },
-  // --- Authentication ---
-  {
-    name: 'Authentication',
-    path: '/auth',
-    icon: Icon(MdLock),
-    collapse: true,
-    items: [
-      // --- Sign In ---
-      {
-        name: 'Sign In',
-        path: '/sign-in',
-        collapse: true,
-        items: [
-          {
-            name: 'Default',
-            layout: '/auth',
-            path: '/sign-in/default',
-          },
-          {
-            name: 'Centered',
-            layout: '/auth',
-            path: '/sign-in/centered',
-          },
-        ],
-      },
-      // --- Sign Up ---
-      {
-        name: 'Sign Up',
-        path: '/sign-up',
-        collapse: true,
-        items: [
-          {
-            name: 'Default',
-            layout: '/auth',
-            path: '/sign-up/default',
-          },
-          {
-            name: 'Centered',
-            layout: '/auth',
-            path: '/sign-up/centered',
-          },
-        ],
-      },
-      // --- Verification ---
-      {
-        name: 'Verification',
-        path: '/verification',
-        collapse: true,
-        items: [
-          {
-            name: 'Default',
-            layout: '/auth',
-            path: '/verification/default',
-          },
-          {
-            name: 'Centered',
-            layout: '/auth',
-            path: '/verification/centered',
-          },
-        ],
-      },
-      // --- Lock ---
-      {
-        name: 'Lock',
-        path: '/lock',
-        collapse: true,
-        items: [
-          {
-            name: 'Default',
-            layout: '/auth',
-            path: '/lock/default',
-          },
-          {
-            name: 'Centered',
-            layout: '/auth',
-            path: '/lock/centered',
-          },
-        ],
-      },
-      // --- Forgot Password ---
-      {
-        name: 'Forgot Password',
-        path: '/forgot-password',
-        collapse: true,
-        items: [
-          {
-            name: 'Default',
-            layout: '/auth',
-            path: '/forgot-password/default',
-          },
-          {
-            name: 'Centered',
-            layout: '/auth',
-            path: '/forgot-password/centered',
           },
         ],
       },
