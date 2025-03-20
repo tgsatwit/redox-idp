@@ -52,12 +52,14 @@ const DYNAMODB_ELEMENT_TABLE = process.env.DYNAMODB_ELEMENT_TABLE || 'document-p
 // In a real implementation, these would be fetched from another DynamoDB table
 const DOCUMENT_TYPE_MAP: Record<string, string> = {
   'ID Document': 'byvwu9fbl62ku1dj370agewe',
+  'Credit Card': 'nxl6uw1duzziysgoxz3qgus3',
   // Add more mappings as needed
 };
 
 const DOCUMENT_SUBTYPE_MAP: Record<string, string> = {
   'Passport': 'aafc32e1-9cbe-4ba4-9a12-a03b19563499',
   "Driver's License": '302bbb499-cb8e-48e3-8baf-4c57f2d13107',
+  'Default Credit Card Subtype': 'fcwutlseag5ykri6zylfm93r',
   // Add more mappings as needed
 };
 
@@ -132,16 +134,26 @@ export async function GET(request: NextRequest) {
     let documentTypeId = documentType;
     let subTypeId = subType;
 
-    // If the document type is in our map, use the mapped ID
-    if (DOCUMENT_TYPE_MAP[documentType]) {
-      documentTypeId = DOCUMENT_TYPE_MAP[documentType];
-      console.log(`Mapped document type "${documentType}" to ID "${documentTypeId}"`);
+    // If the document type is in our map, use the mapped ID (case-insensitive check)
+    const documentTypeLower = documentType.toLowerCase();
+    for (const [key, value] of Object.entries(DOCUMENT_TYPE_MAP)) {
+      if (key.toLowerCase() === documentTypeLower) {
+        documentTypeId = value;
+        console.log(`Mapped document type "${documentType}" to ID "${documentTypeId}" (case-insensitive match)`);
+        break;
+      }
     }
 
-    // If the subtype is in our map, use the mapped ID
-    if (subType && DOCUMENT_SUBTYPE_MAP[subType]) {
-      subTypeId = DOCUMENT_SUBTYPE_MAP[subType];
-      console.log(`Mapped document subtype "${subType}" to ID "${subTypeId}"`);
+    // If the subtype is in our map, use the mapped ID (case-insensitive check)
+    if (subType) {
+      const subTypeLower = subType.toLowerCase();
+      for (const [key, value] of Object.entries(DOCUMENT_SUBTYPE_MAP)) {
+        if (key.toLowerCase() === subTypeLower) {
+          subTypeId = value;
+          console.log(`Mapped document subtype "${subType}" to ID "${subTypeId}" (case-insensitive match)`);
+          break;
+        }
+      }
     }
 
     try {
@@ -205,6 +217,69 @@ export async function GET(request: NextRequest) {
       
       // Return mock data if no elements found in database
       console.log('No document elements found in database, returning mock data');
+      
+      // Different mock data based on document type
+      if (documentType.toLowerCase().includes('credit card') || documentTypeId === DOCUMENT_TYPE_MAP['Credit Card']) {
+        return NextResponse.json([
+          {
+            id: 'mock-cc-element-1',
+            documentTypeId: documentTypeId,
+            subTypeId: subTypeId || undefined,
+            name: 'Card Number',
+            description: 'The credit card number',
+            category: 'Financial',
+            required: true,
+            action: 'ExtractAndRedact',
+            aliases: ['Credit Card Number', 'CC Number', 'Account Number']
+          },
+          {
+            id: 'mock-cc-element-2',
+            documentTypeId: documentTypeId,
+            subTypeId: subTypeId || undefined,
+            name: 'Cardholder Name',
+            description: 'The name of the cardholder',
+            category: 'Personal Information',
+            required: true,
+            action: 'Extract',
+            aliases: ['Name', 'Card Holder', 'Member Name']
+          },
+          {
+            id: 'mock-cc-element-3',
+            documentTypeId: documentTypeId,
+            subTypeId: subTypeId || undefined,
+            name: 'Expiration Date',
+            description: 'The expiration date of the credit card',
+            category: 'Financial',
+            required: true,
+            action: 'Extract',
+            aliases: ['Exp Date', 'Valid Thru', 'Good Thru', 'Expires']
+          },
+          {
+            id: 'mock-cc-element-4',
+            documentTypeId: documentTypeId,
+            subTypeId: subTypeId || undefined,
+            name: 'CVV',
+            description: 'The Card Verification Value code',
+            category: 'Sensitive Information',
+            required: false,
+            action: 'Redact',
+            aliases: ['Security Code', 'CVC', 'CVV2', 'Card Code']
+          },
+          {
+            id: 'mock-cc-element-5',
+            documentTypeId: documentTypeId,
+            subTypeId: subTypeId || undefined,
+            name: 'Issuing Bank',
+            description: 'The bank that issued the credit card',
+            category: 'Financial',
+            required: false,
+            action: 'Extract',
+            aliases: ['Bank Name', 'Issuer']
+          }
+        ]);
+      }
+      
+      // Default mock data for other document types
       return NextResponse.json([
         {
           id: 'mock-element-1',

@@ -195,6 +195,14 @@ const IDPDashboard = () => {
       iconColor: "text-blue-400"
     },
     {
+      title: "Redact Credit Card",
+      description: "Process and redact credit card information",
+      icon: <FaRegFileAlt size={22} />,
+      path: "/admin/document-processing/cc",
+      bgColor: "bg-red-900/30",
+      iconColor: "text-red-400"
+    },
+    {
       title: "Use Predefined Workflow",
       description: "Process a document with an existing workflow",
       icon: <FaRegFileAlt size={22} />,

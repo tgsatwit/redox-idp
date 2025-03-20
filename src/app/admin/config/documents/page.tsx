@@ -800,6 +800,8 @@ const DataElementsCard = () => {
     type: 'Text',
     category: 'General'
   });
+  const [isFixingElements, setIsFixingElements] = useState(false);
+  const [fixElementsMessage, setFixElementsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   
   const resetForm = () => {
     setNewElement({
@@ -830,6 +832,52 @@ const DataElementsCard = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setFormMode('none');
+  };
+  
+  const handleFixElements = async () => {
+    if (!selectedDocType) {
+      console.error('No document type selected');
+      return;
+    }
+    
+    setIsFixingElements(true);
+    setFixElementsMessage(null);
+    
+    try {
+      const response = await fetch(`/api/update-config/document-types/${selectedDocType.id}/fix-elements`, {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setFixElementsMessage({
+          type: 'success',
+          text: 'Elements synchronized successfully'
+        });
+        
+        // Refresh the document type to show updated elements
+        await fetchDocumentType(selectedDocType.id);
+      } else {
+        setFixElementsMessage({
+          type: 'error',
+          text: data.error || 'Failed to synchronize elements'
+        });
+      }
+    } catch (error) {
+      console.error('Error fixing elements:', error);
+      setFixElementsMessage({
+        type: 'error',
+        text: 'Network error while synchronizing elements'
+      });
+    } finally {
+      setIsFixingElements(false);
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setFixElementsMessage(null);
+      }, 5000);
+    }
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1001,6 +1049,28 @@ const DataElementsCard = () => {
               Refresh
             </Button>
             
+            {selectedDocType && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleFixElements}
+                disabled={isFixingElements}
+                title="Fix inconsistencies between data tables"
+              >
+                {isFixingElements ? (
+                  <>
+                    <Spinner size="sm" className="mr-1" />
+                    Fixing...
+                  </>
+                ) : (
+                  <>
+                    <FiSettings className="mr-1" size={14} />
+                    Fix Elements
+                  </>
+                )}
+              </Button>
+            )}
+            
             {!isModalOpen && (
               <Button 
                 variant="outline" 
@@ -1013,6 +1083,16 @@ const DataElementsCard = () => {
             )}
           </div>
         </div>
+        
+        {fixElementsMessage && (
+          <div className={`mt-4 p-2 rounded-md text-sm ${
+            fixElementsMessage.type === 'success' 
+              ? 'bg-green-100 text-green-700 dark:bg-green-800/20 dark:text-green-400' 
+              : 'bg-red-100 text-red-700 dark:bg-red-800/20 dark:text-red-400'
+          }`}>
+            {fixElementsMessage.text}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         {isModalOpen ? (

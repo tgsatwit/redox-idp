@@ -1504,12 +1504,91 @@ export class DynamoDBConfigService {
         return newElement;
       }
 
+      // First, save the element to the data element table
       await docClient.send(
         new PutCommand({
           TableName: DATA_ELEMENT_TABLE,
           Item: newElement
         })
       );
+
+      // Then, update the appropriate parent table (either document type or subtype)
+      if (subTypeId) {
+        // Update the subtype to include this element in its dataElements array
+        try {
+          console.log(`Updating subtype ${subTypeId} with new data element ${newElement.id} in dataElements array`);
+          
+          // Directly append the new element to the dataElements array without checking if it exists
+          // This ensures the element is added even if there are issues with checking the existing array
+          await docClient.send(
+            new UpdateCommand({
+              TableName: SUB_TYPE_TABLE,
+              Key: { id: subTypeId },
+              UpdateExpression: 'SET dataElements = list_append(if_not_exists(dataElements, :empty_list), :new_element)',
+              ExpressionAttributeValues: {
+                ':empty_list': [],
+                ':new_element': [newElement]
+              }
+            })
+          );
+          
+          console.log(`Successfully updated subtype ${subTypeId} with new element in dataElements array`);
+        } catch (subTypeUpdateError) {
+          console.error(`Error updating subtype's dataElements array:`, subTypeUpdateError);
+          // Continue with the operation even if this part fails
+        }
+      } else {
+        // Update the document type to include this element in its dataElements array
+        try {
+          console.log(`Updating document type ${documentTypeId} with new data element ${newElement.id} in dataElements array`);
+          
+          // Directly append the new element to the dataElements array without checking if it exists
+          // This ensures the element is added even if there are issues with checking the existing array
+          await docClient.send(
+            new UpdateCommand({
+              TableName: DOC_TYPE_TABLE,
+              Key: { id: documentTypeId },
+              UpdateExpression: 'SET dataElements = list_append(if_not_exists(dataElements, :empty_list), :new_element)',
+              ExpressionAttributeValues: {
+                ':empty_list': [],
+                ':new_element': [newElement]
+              }
+            })
+          );
+          
+          console.log(`Successfully updated document type ${documentTypeId} with new element in dataElements array`);
+        } catch (docTypeUpdateError) {
+          console.error(`Error updating document type's dataElements array:`, docTypeUpdateError);
+          // If there's a specific error about the update expression, try an alternative approach
+          try {
+            console.log("Trying alternative approach to update document type");
+            
+            // Get the current document type
+            const docType = await this.getDocumentType(documentTypeId);
+            if (docType) {
+              // Create a new array with all existing elements plus the new one
+              const updatedElements = [...(docType.dataElements || []), newElement];
+              
+              // Replace the entire dataElements array
+              await docClient.send(
+                new UpdateCommand({
+                  TableName: DOC_TYPE_TABLE,
+                  Key: { id: documentTypeId },
+                  UpdateExpression: 'SET dataElements = :elements',
+                  ExpressionAttributeValues: {
+                    ':elements': updatedElements
+                  }
+                })
+              );
+              
+              console.log(`Successfully updated document type with alternative approach`);
+            }
+          } catch (alternativeError) {
+            console.error("Alternative approach also failed:", alternativeError);
+            // Continue with the operation even if this part fails
+          }
+        }
+      }
 
       return newElement;
     } catch (error) {
@@ -1620,7 +1699,7 @@ export class DynamoDBConfigService {
         return;
       }
 
-      // Create the update expression dynamically
+      // Create the update expression dynamically for the data element table
       const updateExpressions = [];
       const expressionAttributeNames: Record<string, string> = {};
       const expressionAttributeValues: Record<string, any> = {};
@@ -1647,6 +1726,7 @@ export class DynamoDBConfigService {
         }
       }
 
+      // First, update the element in the data element table
       await docClient.send(
         new UpdateCommand({
           TableName: DATA_ELEMENT_TABLE,
@@ -1656,6 +1736,102 @@ export class DynamoDBConfigService {
           ExpressionAttributeValues: expressionAttributeValues
         })
       );
+
+      // Then, update the element in the parent tables
+
+      // Step 1: First fetch the full updated element to use in parent tables
+      let updatedElement: DataElementConfig | null = null;
+      try {
+        updatedElement = await this.getDataElement(dataElementId);
+        if (!updatedElement) {
+          console.warn(`Could not fetch updated element ${dataElementId} for parent table updates`);
+          return; // Cannot proceed without the updated element
+        }
+      } catch (fetchError) {
+        console.error(`Error fetching updated element ${dataElementId}:`, fetchError);
+        return; // Cannot proceed without the updated element
+      }
+
+      // Step 2: Update the appropriate parent table
+      if (subTypeId) {
+        // Update the element in the subtype's dataElements array
+        try {
+          console.log(`Updating element ${dataElementId} in subtype ${subTypeId} dataElements array`);
+          
+          // Try a complete replacement of the subtype's dataElements array
+          const subType = await this.getSubType(subTypeId);
+          if (!subType) {
+            console.warn(`Subtype ${subTypeId} not found, cannot update dataElements array`);
+            return;
+          }
+          
+          // Replace all elements with the existing elements (replacing the updated one)
+          const updatedElements = (subType.dataElements || []).map(element => 
+            element.id === dataElementId ? updatedElement : element
+          );
+          
+          // If the element wasn't found in the array, add it
+          if (!updatedElements.some(el => el.id === dataElementId)) {
+            updatedElements.push(updatedElement);
+          }
+          
+          // Replace the entire array
+          await docClient.send(
+            new UpdateCommand({
+              TableName: SUB_TYPE_TABLE,
+              Key: { id: subTypeId },
+              UpdateExpression: 'SET dataElements = :elements',
+              ExpressionAttributeValues: {
+                ':elements': updatedElements
+              }
+            })
+          );
+          
+          console.log(`Successfully updated element in subtype's dataElements array`);
+        } catch (subTypeUpdateError) {
+          console.error(`Error updating element in subtype's dataElements array:`, subTypeUpdateError);
+          // Continue execution even if this part fails
+        }
+      } else {
+        // Update the element in the document type's dataElements array
+        try {
+          console.log(`Updating element ${dataElementId} in document type ${documentTypeId} dataElements array`);
+          
+          // Try a complete replacement of the document type's dataElements array
+          const docType = await this.getDocumentType(documentTypeId);
+          if (!docType) {
+            console.warn(`Document type ${documentTypeId} not found, cannot update dataElements array`);
+            return;
+          }
+          
+          // Replace all elements with the existing elements (replacing the updated one)
+          const updatedElements = (docType.dataElements || []).map(element => 
+            element.id === dataElementId ? updatedElement : element
+          );
+          
+          // If the element wasn't found in the array, add it
+          if (!updatedElements.some(el => el.id === dataElementId)) {
+            updatedElements.push(updatedElement);
+          }
+          
+          // Replace the entire array
+          await docClient.send(
+            new UpdateCommand({
+              TableName: DOC_TYPE_TABLE,
+              Key: { id: documentTypeId },
+              UpdateExpression: 'SET dataElements = :elements',
+              ExpressionAttributeValues: {
+                ':elements': updatedElements
+              }
+            })
+          );
+          
+          console.log(`Successfully updated element in document type's dataElements array`);
+        } catch (docTypeUpdateError) {
+          console.error(`Error updating element in document type's dataElements array:`, docTypeUpdateError);
+          // Continue execution even if this part fails
+        }
+      }
     } catch (error) {
       console.error(`Error updating data element ${dataElementId}:`, error);
       
@@ -1764,15 +1940,93 @@ export class DynamoDBConfigService {
         };
         
         saveToLocalStorage(LS_CONFIG_KEY, updatedConfig);
+        
+        // Also remove from elements storage
+        const allElements = getFromLocalStorage<DataElementConfig[]>(LS_DATA_ELEMENTS_KEY, []);
+        const updatedElements = allElements.filter(element => element.id !== dataElementId);
+        saveToLocalStorage(LS_DATA_ELEMENTS_KEY, updatedElements);
+        
         return;
       }
 
+      // First, delete from the data element table
       await docClient.send(
         new DeleteCommand({
           TableName: DATA_ELEMENT_TABLE,
           Key: { id: dataElementId }
         })
       );
+      
+      // Then, remove the element from the parent table's dataElements array
+      if (subTypeId) {
+        try {
+          console.log(`Removing element ${dataElementId} from subtype ${subTypeId} dataElements array`);
+          
+          // Get the current subtype to find the element's position in the array
+          const subType = await this.getSubType(subTypeId);
+          if (!subType) {
+            console.error(`Subtype ${subTypeId} not found, cannot remove element from dataElements array`);
+            return;
+          }
+          
+          // Filter out the element to delete
+          const updatedElements = (subType.dataElements || []).filter(
+            element => typeof element === 'object' && element.id !== dataElementId
+          );
+          
+          // Replace the entire array with the filtered version
+          await docClient.send(
+            new UpdateCommand({
+              TableName: SUB_TYPE_TABLE,
+              Key: { id: subTypeId },
+              UpdateExpression: 'SET dataElements = :elements',
+              ExpressionAttributeValues: {
+                ':elements': updatedElements
+              }
+            })
+          );
+          
+          console.log(`Successfully removed element from subtype's dataElements array`);
+        } catch (subTypeUpdateError) {
+          console.error(`Error removing element from subtype's dataElements array:`, subTypeUpdateError);
+          console.error(subTypeUpdateError);
+          // Continue execution even if this part fails
+        }
+      } else {
+        try {
+          console.log(`Removing element ${dataElementId} from document type ${documentTypeId} dataElements array`);
+          
+          // Get the current document type to find the element's position in the array
+          const docType = await this.getDocumentType(documentTypeId);
+          if (!docType) {
+            console.error(`Document type ${documentTypeId} not found, cannot remove element from dataElements array`);
+            return;
+          }
+          
+          // Filter out the element to delete, ensuring we only work with valid objects
+          const updatedElements = (docType.dataElements || []).filter(
+            element => typeof element === 'object' && element.id !== dataElementId
+          );
+          
+          // Replace the entire array with the filtered version
+          await docClient.send(
+            new UpdateCommand({
+              TableName: DOC_TYPE_TABLE,
+              Key: { id: documentTypeId },
+              UpdateExpression: 'SET dataElements = :elements',
+              ExpressionAttributeValues: {
+                ':elements': updatedElements
+              }
+            })
+          );
+          
+          console.log(`Successfully removed element from document type's dataElements array`);
+        } catch (docTypeUpdateError) {
+          console.error(`Error removing element from document type's dataElements array:`, docTypeUpdateError);
+          console.error(docTypeUpdateError);
+          // Continue execution even if this part fails
+        }
+      }
     } catch (error) {
       console.error(`Error deleting data element ${dataElementId}:`, error);
       
@@ -1817,6 +2071,12 @@ export class DynamoDBConfigService {
         };
         
         saveToLocalStorage(LS_CONFIG_KEY, updatedConfig);
+        
+        // Also remove from elements storage
+        const allElements = getFromLocalStorage<DataElementConfig[]>(LS_DATA_ELEMENTS_KEY, []);
+        const updatedElements = allElements.filter(element => element.id !== dataElementId);
+        saveToLocalStorage(LS_DATA_ELEMENTS_KEY, updatedElements);
+        
         return;
       }
       
@@ -3319,6 +3579,158 @@ export class DynamoDBConfigService {
       }
       
       throw error;
+    }
+  }
+
+  /**
+   * Get a specific data element by ID
+   */
+  async getDataElement(elementId: string): Promise<DataElementConfig | null> {
+    try {
+      console.log(`Getting data element with ID ${elementId}`);
+      
+      // If using fallback storage, get from local storage
+      if (this.useFallbackStorage) {
+        const allElements = getFromLocalStorage<DataElementConfig[]>(LS_DATA_ELEMENTS_KEY, []);
+        const element = allElements.find(elem => elem.id === elementId);
+        
+        if (!element) {
+          console.warn(`Data element ${elementId} not found in local storage`);
+          return null;
+        }
+        
+        return element;
+      }
+      
+      // Get from DynamoDB
+      const response = await docClient.send(
+        new GetCommand({
+          TableName: DATA_ELEMENT_TABLE,
+          Key: { id: elementId }
+        })
+      );
+      
+      if (!response.Item) {
+        console.warn(`Data element ${elementId} not found in DynamoDB`);
+        return null;
+      }
+      
+      return response.Item as DataElementConfig;
+    } catch (error) {
+      console.error(`Error getting data element ${elementId}:`, error);
+      
+      // If permission error, use local storage fallback
+      if (isPermissionError(error)) {
+        console.log('Using local storage fallback for getting data element due to permission issues');
+        this.useFallbackStorage = true;
+        
+        const allElements = getFromLocalStorage<DataElementConfig[]>(LS_DATA_ELEMENTS_KEY, []);
+        const element = allElements.find(elem => elem.id === elementId);
+        
+        if (!element) {
+          console.warn(`Data element ${elementId} not found in local storage`);
+          return null;
+        }
+        
+        return element;
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Fix and synchronize document element arrays for a document type
+   * This is a helper method that can be used to ensure a document type's dataElements array
+   * is properly synchronized with the elements in the DATA_ELEMENT_TABLE
+   */
+  async fixDocumentElements(documentTypeId: string): Promise<boolean> {
+    try {
+      console.log(`Fixing document elements for document type ${documentTypeId}`);
+      
+      // First, get the document type
+      const docType = await this.getDocumentType(documentTypeId);
+      if (!docType) {
+        console.error(`Document type ${documentTypeId} not found`);
+        return false;
+      }
+      
+      // Then, get all elements related to this document type from the DATA_ELEMENT_TABLE
+      // We'll use a scan with filter since we may not have the proper indexes
+      const response = await docClient.send(
+        new ScanCommand({
+          TableName: DATA_ELEMENT_TABLE,
+          FilterExpression: 'documentTypeId = :docTypeId',
+          ExpressionAttributeValues: {
+            ':docTypeId': documentTypeId
+          }
+        })
+      );
+      
+      const allElementsFromTable = response.Items as DataElementConfig[] || [];
+      console.log(`Found ${allElementsFromTable.length} data elements in DYNAMODB_ELEMENT_TABLE for document type ${documentTypeId}`);
+      
+      // Separate into doc-level elements and subtype elements
+      const docLevelElements = allElementsFromTable.filter(element => !element.subTypeId);
+      const subTypeElementsMap: Record<string, DataElementConfig[]> = {};
+      
+      allElementsFromTable.filter(element => element.subTypeId).forEach(element => {
+        if (element.subTypeId) {
+          if (!subTypeElementsMap[element.subTypeId]) {
+            subTypeElementsMap[element.subTypeId] = [];
+          }
+          subTypeElementsMap[element.subTypeId].push(element);
+        }
+      });
+      
+      // Update the document type with the correct doc-level elements
+      try {
+        console.log(`Updating document type ${documentTypeId} with ${docLevelElements.length} doc-level elements`);
+        await docClient.send(
+          new UpdateCommand({
+            TableName: DOC_TYPE_TABLE,
+            Key: { id: documentTypeId },
+            UpdateExpression: 'SET dataElements = :elements',
+            ExpressionAttributeValues: {
+              ':elements': docLevelElements
+            }
+          })
+        );
+        console.log(`Successfully updated document type ${documentTypeId} with correct doc-level elements`);
+      } catch (updateError) {
+        console.error(`Error updating document type ${documentTypeId} with doc-level elements:`, updateError);
+        return false;
+      }
+      
+      // Update each subtype with its correct elements
+      if (docType.subTypes && docType.subTypes.length > 0) {
+        for (const subType of docType.subTypes) {
+          const elementsForSubType = subTypeElementsMap[subType.id] || [];
+          
+          try {
+            console.log(`Updating subtype ${subType.id} with ${elementsForSubType.length} elements`);
+            await docClient.send(
+              new UpdateCommand({
+                TableName: SUB_TYPE_TABLE,
+                Key: { id: subType.id },
+                UpdateExpression: 'SET dataElements = :elements',
+                ExpressionAttributeValues: {
+                  ':elements': elementsForSubType
+                }
+              })
+            );
+            console.log(`Successfully updated subtype ${subType.id} with correct elements`);
+          } catch (subTypeUpdateError) {
+            console.error(`Error updating subtype ${subType.id} with elements:`, subTypeUpdateError);
+            // Continue with other subtypes even if this one fails
+          }
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`Error fixing document elements for ${documentTypeId}:`, error);
+      return false;
     }
   }
 } 

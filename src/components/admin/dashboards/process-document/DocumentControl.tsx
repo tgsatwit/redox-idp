@@ -26,6 +26,7 @@ const DYNAMODB_ELEMENT_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_ELEMENT_TABLE ||
 // Known document types and their IDs to help with debugging
 const DOCUMENT_TYPE_MAP: Record<string, string> = {
   'ID Document': 'byvwu9fbl62ku1dj370agewe',
+  'Credit Card': 'nxl6uw1duzziysgoxz3qgus3',
   // Add more as needed
 };
 
@@ -33,6 +34,10 @@ const DOCUMENT_TYPE_MAP: Record<string, string> = {
 const DOCUMENT_SUBTYPE_MAP: Record<string, string> = {
   'Passport': 'aafc32e1-9cbe-4ba4-9a12-a03b19563499',
   "Driver's License": '302bbb499-cb8e-48e3-8baf-4c57f2d13107',
+  'Default Credit Card Subtype': 'fcwutlseag5ykri6zylfm93r',
+  'Visa': 'ku1dj37o1lwmfcwut93rls03',
+  'Mastercard': 'fcwutlseag5ykri6zylfm93r',
+  'American Express': 'ku1dj37o1lwmfcwutlse31f',
   // Add more as needed
 };
 
@@ -467,6 +472,24 @@ const DocumentControl: ForwardRefRenderFunction<DocumentControlHandle, DocumentC
       setError(null);
       
       try {
+        console.log(`Fetching document elements for type: "${documentType}", subType: "${documentSubType || 'none'}"`);
+        
+        // Log document type mapping lookup
+        if (DOCUMENT_TYPE_MAP[documentType]) {
+          console.log(`Found document type mapping: "${documentType}" → "${DOCUMENT_TYPE_MAP[documentType]}"`);
+        } else {
+          console.warn(`No document type mapping found for "${documentType}" in DOCUMENT_TYPE_MAP`);
+          console.log('Available document type mappings:', Object.keys(DOCUMENT_TYPE_MAP).join(', '));
+        }
+        
+        // Log subtype mapping lookup if applicable
+        if (documentSubType && DOCUMENT_SUBTYPE_MAP[documentSubType]) {
+          console.log(`Found subtype mapping: "${documentSubType}" → "${DOCUMENT_SUBTYPE_MAP[documentSubType]}"`);
+        } else if (documentSubType) {
+          console.warn(`No subtype mapping found for "${documentSubType}" in DOCUMENT_SUBTYPE_MAP`);
+          console.log('Available subtype mappings:', Object.keys(DOCUMENT_SUBTYPE_MAP).join(', '));
+        }
+        
         // API call to get document elements from DynamoDB
         const response = await fetch(`/api/docs-3-process/document-elements?documentType=${documentType}${documentSubType ? `&subType=${documentSubType}` : ''}`);
         setFetchAttempted(true);
@@ -477,6 +500,7 @@ const DocumentControl: ForwardRefRenderFunction<DocumentControlHandle, DocumentC
         }
         
         const responseData = await response.json();
+        console.log(`Received ${responseData?.length || 0} document elements from API`);
         
         // The responseData should be an array of elements
         setDocumentElements(Array.isArray(responseData) ? responseData : []);

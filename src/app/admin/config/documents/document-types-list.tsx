@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FiPlus, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi';
 import { useDocumentConfig } from './document-config-context';
 import { DocumentTypeConfig } from '@/lib/types';
+import AddDocumentTypeModal from './add-document-type-modal';
 
 // Custom UI Components
 const Button = ({ 
@@ -95,6 +96,7 @@ export default function DocumentTypesList() {
     documentTypes, 
     selectedDocType, 
     fetchDocumentType,
+    fetchDocumentTypes,
     setSelectedDocType,
     setActiveTab,
     setFormMode,
@@ -104,6 +106,7 @@ export default function DocumentTypesList() {
   // Add state for search and pagination
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const itemsPerPage = 5;
 
   // Handle document type selection
@@ -137,7 +140,7 @@ export default function DocumentTypesList() {
 
   // Handle add new item button click
   const handleAddNew = () => {
-    setFormMode('add');
+    setIsAddModalOpen(true);
   };
   
   // Add filtering function
@@ -241,9 +244,16 @@ export default function DocumentTypesList() {
                   <p className={`font-medium ${selectedDocType?.id === docType.id ? 'text-brand-800 dark:text-white' : 'text-gray-900 dark:text-white'}`}>
                     {docType.name}
                   </p>
-                  <p className={`text-xs ${selectedDocType?.id === docType.id ? 'text-brand-600 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
-                    {docType.subTypes?.length || 0} sub-types
-                  </p>
+                  <div className="flex flex-col space-y-1">
+                    <p className={`text-xs ${selectedDocType?.id === docType.id ? 'text-brand-600 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {docType.subTypes?.length || 0} sub-types
+                    </p>
+                    {docType.awsAnalysisType && (
+                      <p className={`text-xs ${selectedDocType?.id === docType.id ? 'text-brand-600 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {docType.awsAnalysisType.replace('TEXTRACT_', '').replace(/_/g, ' ').toLowerCase()}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <button
                   className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-navy-700"
@@ -302,6 +312,16 @@ export default function DocumentTypesList() {
           </div>
         </>
       )}
+
+      {/* Add document type modal */}
+      <AddDocumentTypeModal 
+        isOpen={isAddModalOpen} 
+        onClose={() => {
+          setIsAddModalOpen(false);
+          // After closing, refresh the document types list to show the new one
+          fetchDocumentTypes(true);
+        }}
+      />
     </div>
   );
 } 

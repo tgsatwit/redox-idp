@@ -93,6 +93,7 @@ export interface DocumentTypeConfig {
   isActive: boolean
   trainingDatasets?: TrainingDataset[]
   defaultModelId?: string
+  awsAnalysisType?: string // Optional AWS Textract analysis type for the document
 }
 
 export interface StorageSolution {

@@ -63,6 +63,11 @@ const routes = [
         path: '/document-processing/process',
       },
       {
+        name: 'Credit Card',
+        layout: '/admin',
+        path: '/document-processing/cc',
+      },
+      {
         name: 'Document Workflow',
         layout: '/admin',
         path: '/document-processing/workflow',
