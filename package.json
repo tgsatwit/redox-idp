@@ -2,15 +2,17 @@
   "name": "horizon-tailwind-react-nextjs-pro",
   "version": "3.0.0",
   "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "export": "next export",
     "lint": "next lint",
-    "predeploy": "yarn run build",
-    "deploy": "gh-pages -d build",
-    "preinstall": "npx npm-force-resolutions",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d .next",
     "init-workflow-tasks": "node src/scripts/run-init-workflow-tasks.js",
     "setup-workflow-tables": "node -r ts-node/register scripts/setup-workflow-tables.ts",
     "setup-workflow-tables:force": "node -r ts-node/register scripts/setup-workflow-tables.ts --force"
@@ -118,12 +120,11 @@
     "tailwindcss": "^3.3.3",
     "ts-node": "^10.9.2"
   },
-  "resolutions": {
-    "react-error-overlay": "6.0.9",
-    "@types/react": "18.0.31",
-    "@types/react-dom": "18.0.11",
-    "minimist": "1.2.6",
-    "css-select": "4.3.0"
+  "overrides": {
+    "@types/react": "18.2.0",
+    "@types/react-dom": "18.2.1",
+    "react": "^19.0.0-rc.1",
+    "react-dom": "^19.0.0-rc.1"
   },
   "eslintConfig": {
     "extends": [
