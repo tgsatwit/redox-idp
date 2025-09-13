@@ -8,9 +8,9 @@ const configService = new DynamoDBConfigService();
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  context: { params: Promise<{ taskId: string }> }
 ) {
-  const { taskId } = params;
+  const { taskId } = await context.params;
   
   try {
     // Get all tasks and find the one with matching ID
@@ -40,9 +40,9 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  context: { params: Promise<{ taskId: string }> }
 ) {
-  const { taskId } = params;
+  const { taskId } = await context.params;
   
   try {
     const updates = await request.json();
@@ -93,9 +93,9 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  context: { params: Promise<{ taskId: string }> }
 ) {
-  const { taskId } = params;
+  const { taskId } = await context.params;
   
   try {
     // Get all workflows to check for task usage

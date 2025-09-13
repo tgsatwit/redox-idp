@@ -5,19 +5,19 @@ import { DataElementConfig } from '@/lib/types';
 const configService = new DynamoDBConfigService();
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
     subTypeId: string;
     elementId: string;
-  };
+  }>;
 }
 
 /**
  * GET - Retrieve a specific data element for a sub-type
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId, elementId } = params;
+    const { docTypeId, subTypeId, elementId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json(element);
   } catch (error: any) {
-    console.error(`Error fetching data element ${params.elementId} for sub-type ${params.subTypeId}:`, error);
+    console.error(`Error fetching data element ${(await context.params).elementId} for sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch data element' },
       { status: 500 }
@@ -62,9 +62,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 /**
  * PUT - Update a specific data element for a sub-type
  */
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId, elementId } = params;
+    const { docTypeId, subTypeId, elementId } = await context.params;
     const updates = await request.json() as Partial<DataElementConfig>;
     
     // Check if document type exists
@@ -102,7 +102,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(`Error updating data element ${params.elementId} for sub-type ${params.subTypeId}:`, error);
+    console.error(`Error updating data element ${(await context.params).elementId} for sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to update data element', details: error.message },
       { status: 500 }
@@ -113,9 +113,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 /**
  * DELETE - Delete a specific data element for a sub-type
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId, elementId } = params;
+    const { docTypeId, subTypeId, elementId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -152,7 +152,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(`Error deleting data element ${params.elementId} for sub-type ${params.subTypeId}:`, error);
+    console.error(`Error deleting data element ${(await context.params).elementId} for sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to delete data element', details: error.message },
       { status: 500 }

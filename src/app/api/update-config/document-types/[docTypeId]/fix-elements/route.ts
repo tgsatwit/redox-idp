@@ -4,17 +4,17 @@ import { DynamoDBConfigService } from '@/lib/services/dynamodb-config-service';
 const configService = new DynamoDBConfigService();
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
-  };
+  }>;
 }
 
 /**
  * POST - Fix and synchronize document elements for a document type
  */
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId } = params;
+    const { docTypeId } = await context.params;
     console.log(`API: Fixing document elements for document type ${docTypeId}`);
     
     // Check if document type exists
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
   } catch (error: any) {
-    console.error(`Error fixing document elements for ${params.docTypeId}:`, error);
+    console.error(`Error fixing document elements for ${(await context.params).docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fix document elements', details: error.message },
       { status: 500 }

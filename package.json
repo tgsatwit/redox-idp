@@ -20,6 +20,7 @@
     "@aws-sdk/client-dynamodb": "^3.758.0",
     "@aws-sdk/client-s3": "^3.758.0",
     "@aws-sdk/client-textract": "^3.758.0",
+    "@aws-sdk/credential-providers": "^3.888.0",
     "@aws-sdk/lib-dynamodb": "^3.758.0",
     "@babel/traverse": "^7.24.6",
     "@chakra-ui/accordion": "^2.1.4",

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react/prop-types */
 "use client";
 
@@ -185,11 +184,11 @@ const DataElementModal = ({
   isLoading: boolean;
   isSubTypeElement?: boolean;
 }) => {
-  // If modal is not open, don't render anything
-  if (!isOpen) return null;
-  
   // Handle aliases as tags
   const [newAlias, setNewAlias] = useState('');
+
+  // If modal is not open, don't render anything
+  if (!isOpen) return null;
   
   const handleAliasKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newAlias.trim()) {

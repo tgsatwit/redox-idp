@@ -49,7 +49,7 @@ export default function Admin({ children }: { children: React.ReactNode }) {
         >
           {/* Routes */}
           <div>
-            <Portal children={
+            <Portal>
               <Navbar
                 onOpenSidenav={() => setOpen(!open)}
                 brandText={getActiveRoute(routes, pathname)}
@@ -60,7 +60,6 @@ export default function Admin({ children }: { children: React.ReactNode }) {
                 mini={mini}
                 setMini={setMini}
               />
-            }>
             </Portal>
             <div className="mx-auto min-h-screen p-2 !pt-[100px] md:p-2">
               {children}

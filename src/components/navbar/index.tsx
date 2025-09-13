@@ -108,7 +108,7 @@ const Navbar = (props: {
           }
           animation="origin-[65%_0%] md:origin-top-right transition-all duration-300 ease-in-out"
           classNames={'py-2 top-4 -left-[230px] md:-left-[440px] w-max'}
-          children={
+        >
             <div className="flex w-[360px] flex-col gap-3 rounded-[20px] bg-white p-4 shadow-xl shadow-shadow-500 dark:!bg-navy-700 dark:text-white dark:shadow-none sm:w-[460px]">
               <div className="flex items-center justify-between">
                 <p className="text-base font-bold text-navy-700 dark:text-white">
@@ -147,8 +147,7 @@ const Navbar = (props: {
                 </div>
               </button>
             </div>
-          }
-        />
+        </Dropdown>
         <Configurator
           mini={props.mini}
           setMini={props.setMini}
@@ -178,7 +177,7 @@ const Navbar = (props: {
             </div>
           }
           classNames={'py-2 top-8 -left-[180px] w-max'}
-          children={
+        >
             <div className="flex h-max w-56 flex-col justify-start rounded-[20px] bg-white bg-cover bg-no-repeat pb-4 shadow-xl shadow-shadow-500 dark:!bg-navy-700 dark:text-white dark:shadow-none">
               <div className="ml-4 mt-3">
                 <div className="flex items-center gap-2">
@@ -204,8 +203,7 @@ const Navbar = (props: {
                 </a>
               </div>
             </div>
-          }
-        />
+        </Dropdown>
       </div>
     </nav>
   );

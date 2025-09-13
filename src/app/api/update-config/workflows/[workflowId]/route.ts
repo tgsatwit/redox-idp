@@ -9,9 +9,9 @@ const configService = new DynamoDBConfigService();
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  context: { params: Promise<{ workflowId: string }> }
 ) {
-  const { workflowId } = params;
+  const { workflowId } = await context.params;
   
   try {
     const workflow = await configService.getWorkflowById(workflowId);
@@ -38,9 +38,9 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  context: { params: Promise<{ workflowId: string }> }
 ) {
-  const { workflowId } = params;
+  const { workflowId } = await context.params;
   
   try {
     const workflow = await configService.getWorkflowById(workflowId);
@@ -95,9 +95,9 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  context: { params: Promise<{ workflowId: string }> }
 ) {
-  const { workflowId } = params;
+  const { workflowId } = await context.params;
   
   try {
     const workflow = await configService.getWorkflowById(workflowId);

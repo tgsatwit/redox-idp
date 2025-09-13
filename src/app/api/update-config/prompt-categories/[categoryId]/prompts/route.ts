@@ -75,11 +75,11 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient, {
  */
 export async function GET(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Access params in an async-friendly way - fix for NextJS warning
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     
     console.log(`Fetching prompts for category ${categoryId} from table ${PROMPTS_TABLE}`);
     
@@ -169,11 +169,11 @@ export async function GET(
  */
 export async function POST(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Fix params access
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     const data = await request.json();
     
     console.log(`Creating prompt for category ${categoryId} in table ${PROMPTS_TABLE}`);
@@ -234,11 +234,11 @@ export async function POST(
  */
 export async function PUT(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Fix params access
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     const updatedPrompts = await request.json();
     
     if (!Array.isArray(updatedPrompts)) {
@@ -303,11 +303,11 @@ export async function PUT(
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Fix params access
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     
     console.log(`Deleting all prompts for category ${categoryId} from table ${PROMPTS_TABLE}`);
     

@@ -72,10 +72,9 @@ export const StorageSolutionDialog: React.FC<StorageSolutionDialogProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      children={
-        <>
-          <ModalOverlay className="bg-[#000] !opacity-30 backdrop-blur-sm" />
-          <ModalContent className="top-[15vh] !m-auto !max-w-[500px] rounded-xl !bg-navy-900 text-white">
+    >
+      <ModalOverlay className="bg-[#000] !opacity-30 backdrop-blur-sm" />
+      <ModalContent className="top-[15vh] !m-auto !max-w-[500px] rounded-xl !bg-navy-900 text-white">
             <form onSubmit={handleSubmit}>
               <ModalHeader className="px-6 pt-6 text-xl font-bold text-white">
                 {editingSolution ? 'Edit Storage Solution' : 'Add Storage Solution'}
@@ -171,9 +170,7 @@ export const StorageSolutionDialog: React.FC<StorageSolutionDialogProps> = ({
                 </button>
               </ModalFooter>
             </form>
-          </ModalContent>
-        </>
-      }
-    />
+      </ModalContent>
+    </Modal>
   );
 }; 

@@ -3,9 +3,9 @@ import { DynamoDBConfigService } from '@/lib/services/dynamodb-config-service';
 import { DocumentTypeConfig } from '@/lib/types';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
-  };
+  }>;
 }
 
 /**
@@ -13,7 +13,7 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId } = context.params;
+    const { docTypeId } = await context.params;
     console.log(`API: Fetching document type ${docTypeId}...`);
     
     // Create a new instance of the service for each request
@@ -106,14 +106,14 @@ export async function GET(request: NextRequest, context: RouteParams) {
     
     return NextResponse.json(documentType);
   } catch (error: any) {
-    console.error(`API: Error fetching document type ${context.params?.docTypeId}:`, error);
+    console.error(`API: Error fetching document type ${(await context.params)?.docTypeId}:`, error);
     
     // Provide a meaningful error response with as much detail as possible
     return NextResponse.json(
       { 
         error: 'Failed to fetch document type', 
         details: error.message || 'Unknown error',
-        docTypeId: context.params?.docTypeId,
+        docTypeId: (await context.params)?.docTypeId,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
       { status: 500 }
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest, context: RouteParams) {
  */
 export async function PUT(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId } = context.params;
+    const { docTypeId } = await context.params;
     const updates = await request.json() as Partial<DocumentTypeConfig>;
     
     // Create a new instance of the service for each request
@@ -146,7 +146,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(`Error updating document type ${context.params?.docTypeId}:`, error);
+    console.error(`Error updating document type ${(await context.params)?.docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to update document type', details: error.message },
       { status: 500 }
@@ -159,7 +159,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
  */
 export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId } = context.params;
+    const { docTypeId } = await context.params;
     
     // Create a new instance of the service for each request
     const configService = new DynamoDBConfigService();
@@ -178,7 +178,7 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(`Error deleting document type ${context.params?.docTypeId}:`, error);
+    console.error(`Error deleting document type ${(await context.params)?.docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to delete document type', details: error.message },
       { status: 500 }

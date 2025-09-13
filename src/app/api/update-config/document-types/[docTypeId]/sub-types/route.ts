@@ -5,15 +5,9 @@ import { DocumentSubTypeConfig } from '@/lib/types';
 const configService = new DynamoDBConfigService();
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
-  };
-}
-
-// Helper function to await params
-async function getAwaitedParams(params: any) {
-  // In case params is a promise, await it
-  return await Promise.resolve(params);
+  }>;
 }
 
 /**
@@ -21,15 +15,13 @@ async function getAwaitedParams(params: any) {
  */
 export async function GET(request: NextRequest, context: RouteParams) {
   try {
-    const awaitedParams = await getAwaitedParams(context.params);
-    if (!awaitedParams.docTypeId) {
+    const { docTypeId } = await context.params;
+    if (!docTypeId) {
       return NextResponse.json(
         { error: 'Document type ID is required' },
         { status: 400 }
       );
     }
-
-    const { docTypeId } = awaitedParams;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -57,7 +49,7 @@ export async function GET(request: NextRequest, context: RouteParams) {
     
     return NextResponse.json(subTypesWithElements);
   } catch (error: any) {
-    console.error(`Error fetching sub-types for document type ${context.params?.docTypeId}:`, error);
+    console.error(`Error fetching sub-types for document type ${(await context.params)?.docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch sub-types', details: error.message },
       { status: 500 }
@@ -70,15 +62,13 @@ export async function GET(request: NextRequest, context: RouteParams) {
  */
 export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const awaitedParams = await getAwaitedParams(context.params);
-    if (!awaitedParams.docTypeId) {
+    const { docTypeId } = await context.params;
+    if (!docTypeId) {
       return NextResponse.json(
         { error: 'Document type ID is required' },
         { status: 400 }
       );
     }
-
-    const { docTypeId } = awaitedParams;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -94,7 +84,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     
     return NextResponse.json(newSubType);
   } catch (error: any) {
-    console.error(`Error creating sub-type for document type ${context.params?.docTypeId}:`, error);
+    console.error(`Error creating sub-type for document type ${(await context.params)?.docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to create sub-type', details: error.message },
       { status: 500 }

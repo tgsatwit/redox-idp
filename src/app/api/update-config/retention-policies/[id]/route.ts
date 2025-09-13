@@ -20,10 +20,10 @@ async function getRetentionPolicyById(id: string) {
 // GET: Get a specific retention policy by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await context.params;
     console.log(`GET /api/update-config/retention-policies/${id} - Fetching specific retention policy from ${TABLE_NAME}`);
     
     if (!id) {

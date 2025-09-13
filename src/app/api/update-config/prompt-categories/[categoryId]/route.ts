@@ -72,11 +72,11 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient, {
  */
 export async function GET(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Access params in an async-friendly way - fix for NextJS warning
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     
     console.log(`Fetching category ${categoryId} from table ${PROMPT_CATEGORIES_TABLE}`);
     
@@ -113,11 +113,11 @@ export async function GET(
  */
 export async function PUT(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Access params in an async-friendly way - fix for NextJS warning
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     const updates = await request.json();
     
     console.log(`Updating category ${categoryId} in table ${PROMPT_CATEGORIES_TABLE}`);
@@ -177,11 +177,11 @@ export async function PUT(
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { categoryId: string } }
+  context: { params: Promise<{ categoryId: string }> }
 ) {
   try {
     // Access params in an async-friendly way - fix for NextJS warning
-    const { categoryId } = params;
+    const { categoryId } = await context.params;
     
     console.log(`Deleting category ${categoryId} from table ${PROMPT_CATEGORIES_TABLE}`);
     

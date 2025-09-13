@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FiPlus, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSearch } from 'react-icons/fi';
 import { useDocumentConfig } from './document-config-context';
 import { DocumentTypeConfig } from '@/lib/types';
 import AddDocumentTypeModal from './add-document-type-modal';

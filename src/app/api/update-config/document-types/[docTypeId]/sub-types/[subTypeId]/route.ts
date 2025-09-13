@@ -5,18 +5,18 @@ import { DocumentSubTypeConfig } from '@/lib/types';
 const configService = new DynamoDBConfigService();
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
     subTypeId: string;
-  };
+  }>;
 }
 
 /**
  * GET - Retrieve a specific sub-type
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId } = params;
+    const { docTypeId, subTypeId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json(subType);
   } catch (error: any) {
-    console.error(`Error fetching sub-type ${params.subTypeId}:`, error);
+    console.error(`Error fetching sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch sub-type' },
       { status: 500 }
@@ -53,9 +53,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 /**
  * PUT - Update a sub-type
  */
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId } = params;
+    const { docTypeId, subTypeId } = await context.params;
     const updates = await request.json() as Partial<DocumentSubTypeConfig>;
     
     // Check if document type exists
@@ -80,7 +80,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(`Error updating sub-type ${params.subTypeId}:`, error);
+    console.error(`Error updating sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to update sub-type' },
       { status: 500 }
@@ -91,9 +91,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 /**
  * DELETE - Delete a sub-type
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId } = params;
+    const { docTypeId, subTypeId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -117,7 +117,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(`Error deleting sub-type ${params.subTypeId}:`, error);
+    console.error(`Error deleting sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to delete sub-type' },
       { status: 500 }

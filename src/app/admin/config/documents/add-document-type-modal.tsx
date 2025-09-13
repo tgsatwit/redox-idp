@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiX, FiPlus, FiInfo, FiCheckCircle } from 'react-icons/fi';
+import { FiX, FiInfo, FiCheckCircle } from 'react-icons/fi';
 import { useDocumentConfig } from './document-config-context';
 import { DataElementConfig, DocumentTypeConfig } from '@/lib/types';
 import { createId } from '@paralleldrive/cuid2';

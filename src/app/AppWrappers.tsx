@@ -47,7 +47,7 @@ export default function AppWrappers({ children }: { children: ReactNode }) {
   }, [theme]);
 
   return (
-    <NoSSR children={
+    <NoSSR>
       <ConfiguratorContext.Provider
         value={{
           mini,
@@ -62,7 +62,6 @@ export default function AppWrappers({ children }: { children: ReactNode }) {
       >
         {children}
       </ConfiguratorContext.Provider>
-    }>
     </NoSSR>
   );
 }

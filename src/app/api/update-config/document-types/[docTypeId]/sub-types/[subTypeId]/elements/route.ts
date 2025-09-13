@@ -5,18 +5,18 @@ import { DataElementConfig } from '@/lib/types';
 const configService = new DynamoDBConfigService();
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
     subTypeId: string;
-  };
+  }>;
 }
 
 /**
  * GET - Retrieve all data elements for a specific sub-type
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId } = params;
+    const { docTypeId, subTypeId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const elements = await configService.getDataElementsBySubType(subTypeId);
     return NextResponse.json(elements);
   } catch (error: any) {
-    console.error(`Error fetching data elements for sub-type ${params.subTypeId}:`, error);
+    console.error(`Error fetching data elements for sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch data elements for sub-type' },
       { status: 500 }
@@ -50,9 +50,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 /**
  * POST - Create a new data element for a specific sub-type
  */
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId, subTypeId } = params;
+    const { docTypeId, subTypeId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json(newElement);
   } catch (error: any) {
-    console.error(`Error creating data element for sub-type ${params.subTypeId}:`, error);
+    console.error(`Error creating data element for sub-type ${(await context.params).subTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to create data element for sub-type', details: error.message },
       { status: 500 }

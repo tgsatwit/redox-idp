@@ -5,17 +5,17 @@ import { DataElementConfig } from '@/lib/types';
 const configService = new DynamoDBConfigService();
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     docTypeId: string;
-  };
+  }>;
 }
 
 /**
  * GET - Retrieve all data elements for a document type
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId } = params;
+    const { docTypeId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const elements = await configService.getDataElementsByDocumentType(docTypeId);
     return NextResponse.json(elements);
   } catch (error: any) {
-    console.error(`Error fetching data elements for document type ${params.docTypeId}:`, error);
+    console.error(`Error fetching data elements for document type ${(await context.params).docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch data elements' },
       { status: 500 }
@@ -40,9 +40,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 /**
  * POST - Create a new data element for a document type
  */
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const { docTypeId } = params;
+    const { docTypeId } = await context.params;
     
     // Check if document type exists
     const documentType = await configService.getDocumentType(docTypeId);
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     
     return NextResponse.json(newElement);
   } catch (error: any) {
-    console.error(`Error creating data element for document type ${params.docTypeId}:`, error);
+    console.error(`Error creating data element for document type ${(await context.params).docTypeId}:`, error);
     return NextResponse.json(
       { error: 'Failed to create data element' },
       { status: 500 }
