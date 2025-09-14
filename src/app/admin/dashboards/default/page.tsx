@@ -165,11 +165,6 @@ const IDPDashboard = () => {
       badge: '12',
     },
     {
-      id: 'performance',
-      label: 'Performance',
-      icon: <MdOutlineAnalytics />,
-    },
-    {
       id: 'settings',
       label: 'Settings',
       icon: <MdSettings />,
@@ -218,14 +213,6 @@ const IDPDashboard = () => {
       bgColor: "bg-amber-900/30",
       iconColor: "text-amber-400"
     },
-    {
-      title: "IDP Performance",
-      description: "View insights and analytics on processing",
-      icon: <MdInsights size={24} />,
-      path: "/admin/dashboards/performance",
-      bgColor: "bg-green-900/30",
-      iconColor: "text-green-400"
-    }
   ];
 
   // System tiles

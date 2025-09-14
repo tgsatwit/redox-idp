@@ -28,21 +28,6 @@ const routes = [
         layout: '/admin',
         path: '/dashboards/default',
       },
-      {
-        name: 'IDP Performance',
-        layout: '/admin',
-        path: '/dashboards/performance',
-      },
-      {
-        name: 'User Dashboard',
-        layout: '/admin',
-        path: '/dashboards/user-dashboard',
-      },  
-      {
-        name: 'Team Dashboard',
-        layout: '/admin',
-        path: '/dashboards/team-dashboard',
-      },
     ],
   },
   // --- Document Processing ---

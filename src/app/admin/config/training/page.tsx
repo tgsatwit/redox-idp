@@ -16,7 +16,6 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { FiAlertCircle, FiCheckCircle, FiClock, FiRefreshCw, FiSettings } from "react-icons/fi";
 
 // Import only the components we need
-import MostVisited from '@/components/admin/dashboards/performance/MostVisitedTable';
 import Card from '@/components/card';
 
 // Define interfaces for our data structures
